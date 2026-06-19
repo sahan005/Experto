@@ -1,0 +1,12 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/invoices.db
+
+# Node/React
+frontend/node_modules/
+frontend/dist/
+frontend/.eslintcache
+frontend/*.local
+.env
