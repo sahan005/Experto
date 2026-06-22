@@ -20,9 +20,9 @@ class ConfirmMappingRequest(BaseModel):
     rows: List[InvoiceDataRow]
 
 class OnboardingContext(BaseModel):
-    expected_date_range: str
+    expected_start_date: Optional[str] = None
+    expected_end_date: Optional[str] = None
     expected_currency: str
-    expected_total_amount_range: str
     po_numbers_required: bool
     expected_payment_status: str
 
@@ -35,3 +35,17 @@ class ChatMessageResponse(BaseModel):
     response: str
     anomaly_count: int
     raw_csv: Optional[str] = None
+
+class QueryFilters(BaseModel):
+    categories: List[str]
+    vendor_name: Optional[str] = None
+    min_amount: Optional[float] = None
+    max_amount: Optional[float] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    payment_status: Optional[str] = None
+
+class ValidatedQuery(BaseModel):
+    is_valid: bool
+    reason: Optional[str] = None
+    filters: Optional[QueryFilters] = None

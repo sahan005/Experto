@@ -1,6 +1,7 @@
 import csv
 import io
 import re
+import base64
 from datetime import datetime, timedelta
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,47 +12,8 @@ from models import (
     ConfirmMappingRequest, ChatMessageRequest, ChatMessageResponse
 )
 from database import init_db, get_db
-from gemini import map_columns_via_gemini, narrate_anomalies_via_gemini, validate_chat_intent, classify_query_intent
+from gemini import map_columns_via_gemini, narrate_anomalies_via_gemini, validate_and_parse_query, extract_invoice_data_via_gemini
 
-def parse_date_range(range_str: str, max_db_date_str: str) -> tuple[datetime | None, datetime | None]:
-    if not range_str:
-        return None, None
-        
-    # Try YYYY-MM-DD to YYYY-MM-DD
-    match = re.search(r"(\d{4}-\d{2}-\d{2})\s*(?:to|-)\s*(\d{4}-\d{2}-\d{2})", range_str)
-    if match:
-        try:
-            start = datetime.strptime(match.group(1), "%Y-%m-%d")
-            end = datetime.strptime(match.group(2), "%Y-%m-%d")
-            return start, end
-        except ValueError:
-            pass
-            
-    # Try "Last X days"
-    match = re.search(r"last\s+(\d+)\s+days", range_str, re.IGNORECASE)
-    if match and max_db_date_str:
-        try:
-            days = int(match.group(1))
-            end = datetime.strptime(max_db_date_str, "%Y-%m-%d")
-            start = end - timedelta(days=days)
-            return start, end
-        except ValueError:
-            pass
-            
-    return None, None
-
-def parse_amount_range(range_str: str) -> tuple[float | None, float | None]:
-    if not range_str:
-        return None, None
-        
-    # Try "X - Y" or "X to Y"
-    match = re.search(r"([\d\.]+)\s*(?:-|to)\s*([\d\.]+)", range_str)
-    if match:
-        try:
-            return float(match.group(1)), float(match.group(2))
-        except ValueError:
-            pass
-    return None, None
 
 app = FastAPI(title="Invoice Anomaly Detection API")
 
@@ -124,6 +86,38 @@ async def upload_csv(file: UploadFile = File(...)):
         "preview_rows": rows
     }
 
+@app.post("/api/upload/document")
+async def upload_document(file: UploadFile = File(...)):
+    filename = file.filename.lower()
+    if not (filename.endswith('.pdf') or filename.endswith('.png') or filename.endswith('.jpg') or filename.endswith('.jpeg')):
+        raise HTTPException(status_code=400, detail="Only PDF, PNG, JPG, and JPEG files are supported")
+    
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 20MB limit")
+        
+    mime_type = "application/pdf"
+    if filename.endswith('.png'):
+        mime_type = "image/png"
+    elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+        mime_type = "image/jpeg"
+        
+    file_base64 = base64.b64encode(content).decode('utf-8')
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT field_name FROM standard_schema")
+    standard_fields = [row["field_name"] for row in cursor.fetchall()]
+    conn.close()
+    
+    extracted_data = await extract_invoice_data_via_gemini(file_base64, mime_type, standard_fields)
+    
+    # extracted_data is a list of dicts. We will return it to the frontend for preview and ingestion
+    return {
+        "filename": file.filename,
+        "extracted_data": extracted_data
+    }
+
 @app.post("/api/map_columns", response_model=ColumnMappingResponse)
 async def map_columns(request: ColumnMappingRequest):
     conn = get_db()
@@ -179,22 +173,66 @@ async def confirm_mapping(request: ConfirmMappingRequest):
 
 @app.post("/api/chat", response_model=ChatMessageResponse)
 async def chat(request: ChatMessageRequest):
-    if not validate_chat_intent(request.message):
+    validation_result = await validate_and_parse_query(request.message)
+    if not validation_result.get("is_valid", False):
         return ChatMessageResponse(
-            response="I am an invoice anomaly detection assistant. Please ask me about invoice anomalies, unexpected dates, currencies, missing PO numbers, or unknown vendors.",
+            response=f"I couldn't process your request: {validation_result.get('reason', 'Invalid query or unrelated topic.')}",
             anomaly_count=0
         )
         
-    # Query database for anomalies based on context
-    # This is a simplified anomaly query logic
+    filters = validation_result.get("filters", {})
+    categories = filters.get("categories", ["all"])
+    
     conn = get_db()
     cursor = conn.cursor()
     
     anomalies = []
     
+    # Get current (most recent) upload file
+    cursor.execute("SELECT source_file FROM invoices ORDER BY upload_timestamp DESC LIMIT 1")
+    row = cursor.fetchone()
+    current_file = row["source_file"] if row else None
+    
+    # Base WHERE clause from parsed filters
+    base_where = "1=1"
+    base_params = []
+    
+    if current_file:
+        base_where += " AND source_file = ?"
+        base_params.append(current_file)
+    
+    if filters.get("vendor_name"):
+        base_where += " AND vendor_name LIKE ?"
+        base_params.append(f"%{filters['vendor_name']}%")
+        
+    if filters.get("min_amount") is not None:
+        base_where += " AND CAST(total_amount AS REAL) >= ?"
+        base_params.append(filters["min_amount"])
+        
+    if filters.get("max_amount") is not None:
+        base_where += " AND CAST(total_amount AS REAL) <= ?"
+        base_params.append(filters["max_amount"])
+        
+    if filters.get("start_date"):
+        base_where += " AND invoice_date >= ?"
+        base_params.append(filters["start_date"])
+        
+    if filters.get("end_date"):
+        base_where += " AND invoice_date <= ?"
+        base_params.append(filters["end_date"])
+        
+    if filters.get("payment_status"):
+        base_where += " AND payment_status LIKE ?"
+        base_params.append(f"%{filters['payment_status']}%")
+        
     # 1. Missing PO Numbers
-    if request.context.po_numbers_required:
-        cursor.execute("SELECT * FROM invoices WHERE purchase_order_number IS NULL OR purchase_order_number = ''")
+    if ("all" in categories or "po_number" in categories) and request.context.po_numbers_required:
+        query = f"""SELECT invoice_id, vendor_name 
+                    FROM invoices 
+                    WHERE ({base_where}) 
+                    GROUP BY source_file, invoice_id, vendor_name 
+                    HAVING MAX(purchase_order_number) IS NULL OR MAX(purchase_order_number) = ''"""
+        cursor.execute(query, base_params)
         for row in cursor.fetchall():
             anomalies.append({
                 "type": "Missing PO Number",
@@ -203,8 +241,12 @@ async def chat(request: ChatMessageRequest):
             })
             
     # 2. Unexpected Currency
-    if request.context.expected_currency:
-        cursor.execute("SELECT * FROM invoices WHERE currency != ? AND currency IS NOT NULL", (request.context.expected_currency,))
+    if ("all" in categories or "currency" in categories) and request.context.expected_currency:
+        query = f"""SELECT invoice_id, vendor_name, MAX(currency) as currency 
+                    FROM invoices 
+                    WHERE ({base_where}) AND currency != ? AND currency IS NOT NULL 
+                    GROUP BY source_file, invoice_id, vendor_name"""
+        cursor.execute(query, base_params + [request.context.expected_currency])
         for row in cursor.fetchall():
             anomalies.append({
                 "type": "Unexpected Currency",
@@ -214,34 +256,69 @@ async def chat(request: ChatMessageRequest):
             })
             
     # 3. Duplicate Invoices
-    cursor.execute("""
-        SELECT invoice_id, vendor_name, COUNT(*) as count 
-        FROM invoices 
-        WHERE invoice_id IS NOT NULL 
-        GROUP BY invoice_id, vendor_name 
-        HAVING count > 1
-    """)
-    for row in cursor.fetchall():
-        anomalies.append({
-            "type": "Duplicate Invoice ID",
-            "invoice_id": row["invoice_id"],
-            "vendor_name": row["vendor_name"],
-            "count": row["count"]
-        })
+    if ("all" in categories or "duplicate" in categories) and current_file:
+        cursor.execute("SELECT DISTINCT invoice_id, vendor_name FROM invoices WHERE source_file = ?", (current_file,))
+        current_props = cursor.fetchall()
+        
+        for prop in current_props:
+            inv_id = prop["invoice_id"]
+            vendor = prop["vendor_name"]
+            
+            if inv_id:
+                cursor.execute("SELECT DISTINCT source_file FROM invoices WHERE invoice_id = ? AND source_file != ?", (inv_id, current_file))
+                other_files = cursor.fetchall()
+                if len(other_files) > 0:
+                    anomalies.append({
+                        "type": "Duplicate Invoice ID",
+                        "invoice_id": inv_id,
+                        "vendor_name": vendor,
+                        "count": len(other_files) + 1
+                    })
+            else:
+                cursor.execute("SELECT SUM(total_amount) FROM invoices WHERE source_file = ?", (current_file,))
+                current_sum = cursor.fetchone()[0]
+                
+                if current_sum and vendor:
+                    cursor.execute("""
+                        SELECT source_file FROM invoices 
+                        WHERE source_file != ? AND vendor_name = ?
+                        GROUP BY source_file
+                        HAVING SUM(total_amount) = ?
+                    """, (current_file, vendor, current_sum))
+                    other_files = cursor.fetchall()
+                    if len(other_files) > 0:
+                        anomalies.append({
+                            "type": "Duplicate Invoice (Exact Match)",
+                            "invoice_id": "Unknown",
+                            "vendor_name": vendor,
+                            "count": len(other_files) + 1
+                        })
 
     # 4. Out of Date Range
-    if request.context.expected_date_range:
-        cursor.execute("SELECT MAX(invoice_date) FROM invoices")
-        max_row = cursor.fetchone()
-        max_db_date = max_row[0] if max_row else None
-        
-        start_date, end_date = parse_date_range(request.context.expected_date_range, max_db_date)
-        if start_date and end_date:
-            cursor.execute("SELECT * FROM invoices WHERE invoice_date IS NOT NULL")
+    if ("all" in categories or "date" in categories) and (request.context.expected_start_date or request.context.expected_end_date) and not (filters.get("start_date") or filters.get("end_date")):
+        start_date = None
+        end_date = None
+        if request.context.expected_start_date:
+            try:
+                start_date = datetime.strptime(request.context.expected_start_date, "%Y-%m-%d")
+            except ValueError:
+                pass
+        if request.context.expected_end_date:
+            try:
+                end_date = datetime.strptime(request.context.expected_end_date, "%Y-%m-%d")
+            except ValueError:
+                pass
+                
+        if start_date or end_date:
+            query = f"""SELECT invoice_id, vendor_name, MAX(invoice_date) as invoice_date 
+                        FROM invoices 
+                        WHERE ({base_where}) AND invoice_date IS NOT NULL 
+                        GROUP BY source_file, invoice_id, vendor_name"""
+            cursor.execute(query, base_params)
             for row in cursor.fetchall():
                 try:
                     inv_date = datetime.strptime(row["invoice_date"], "%Y-%m-%d")
-                    if inv_date < start_date or inv_date > end_date:
+                    if (start_date and inv_date < start_date) or (end_date and inv_date > end_date):
                         anomalies.append({
                             "type": "Date Out of Range",
                             "invoice_id": row["invoice_id"],
@@ -256,32 +333,13 @@ async def chat(request: ChatMessageRequest):
                         "invoice_date": row["invoice_date"]
                     })
 
-    # 5. Out of Amount Range
-    if request.context.expected_total_amount_range:
-        min_amount, max_amount = parse_amount_range(request.context.expected_total_amount_range)
-        if min_amount is not None and max_amount is not None:
-            cursor.execute("SELECT * FROM invoices WHERE total_amount IS NOT NULL")
-            for row in cursor.fetchall():
-                try:
-                    amount = float(row["total_amount"])
-                    if amount < min_amount or amount > max_amount:
-                        anomalies.append({
-                            "type": "Amount Out of Range",
-                            "invoice_id": row["invoice_id"],
-                            "vendor_name": row["vendor_name"],
-                            "total_amount": row["total_amount"]
-                        })
-                except ValueError:
-                    anomalies.append({
-                        "type": "Invalid Amount Format",
-                        "invoice_id": row["invoice_id"],
-                        "vendor_name": row["vendor_name"],
-                        "total_amount": row["total_amount"]
-                    })
-
-    # 6. Unexpected Payment Status
-    if request.context.expected_payment_status:
-        cursor.execute("SELECT * FROM invoices WHERE payment_status IS NOT NULL")
+    # 5. Unexpected Payment Status
+    if ("all" in categories or "payment_status" in categories) and request.context.expected_payment_status:
+        query = f"""SELECT invoice_id, vendor_name, MAX(payment_status) as payment_status 
+                    FROM invoices 
+                    WHERE ({base_where}) AND payment_status IS NOT NULL 
+                    GROUP BY source_file, invoice_id, vendor_name"""
+        cursor.execute(query, base_params)
         for row in cursor.fetchall():
             if row["payment_status"].lower() != request.context.expected_payment_status.lower():
                 anomalies.append({
@@ -295,45 +353,11 @@ async def chat(request: ChatMessageRequest):
     
     if not anomalies:
         return ChatMessageResponse(
-            response="I analyzed the invoices based on your criteria, and no anomalies were found.",
+            response="I analyzed the database based on your criteria, and no anomalies were found.",
             anomaly_count=0
         )
         
-    # Classify the user query to filter anomalies in Python first
-    categories = await classify_query_intent(request.message)
-    
-    filtered_anomalies = []
-    if "all" in categories:
-        filtered_anomalies = anomalies
-    else:
-        for a in anomalies:
-            # Check po_number
-            if "po_number" in categories and a["type"] == "Missing PO Number":
-                filtered_anomalies.append(a)
-            # Check currency
-            elif "currency" in categories and a["type"] == "Unexpected Currency":
-                filtered_anomalies.append(a)
-            # Check duplicate
-            elif "duplicate" in categories and a["type"] == "Duplicate Invoice ID":
-                filtered_anomalies.append(a)
-            # Check vendor_name
-            elif "vendor_name" in categories:
-                v_name = a.get("vendor_name")
-                if not v_name or v_name in ["Unknown Vendor XYZ", "Ghost Supplies Co", "Shady Deals Pvt Ltd", "None"]:
-                    filtered_anomalies.append(a)
-            # Check date
-            elif "date" in categories and a["type"] in ["Date Out of Range", "Invalid Date Format"]:
-                filtered_anomalies.append(a)
-            # Check amount
-            elif "amount" in categories and a["type"] in ["Amount Out of Range", "Invalid Amount Format"]:
-                filtered_anomalies.append(a)
-            # Check payment_status
-            elif "payment_status" in categories and a["type"] == "Unexpected Payment Status":
-                filtered_anomalies.append(a)
-                    
-        # If no specific categories matched or result is empty, fallback to all anomalies
-        if not filtered_anomalies:
-            filtered_anomalies = anomalies
+    filtered_anomalies = anomalies
         
     narration = await narrate_anomalies_via_gemini(
         query_results=filtered_anomalies,
@@ -393,9 +417,9 @@ async def chat(request: ChatMessageRequest):
             status_val = a.get("payment_status") or "Missing"
             existing = record["payment_status"]
             if not existing:
-                record["payment_status"] = f"Unexpected ({status_val})"
+                record["payment_status"] = status_val
             elif status_val not in existing:
-                record["payment_status"] = existing.rstrip(")") + f"; {status_val})"
+                record["payment_status"] = existing + f"; {status_val}"
 
     raw_csv_lines = [
         "Invoice ID,Vendor,Duplicate Issues,Date Issues,Amount Issues,Currency Issues,PO Issues,Payment Status Issues"
@@ -421,4 +445,4 @@ async def chat(request: ChatMessageRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8081, reload=True)

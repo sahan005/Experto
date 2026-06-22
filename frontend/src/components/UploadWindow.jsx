@@ -1,14 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { UploadCloud, FileText, CheckCircle2, AlertTriangle, XCircle, ArrowRight } from 'lucide-react';
+import { UploadCloud, CheckCircle2, FileText, ArrowRight } from 'lucide-react';
 import Papa from 'papaparse';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://localhost:8081';
 
 function UploadWindow({ onConfirmed }) {
   const [activeTab, setActiveTab] = useState('csv');
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [mappings, setMappings] = useState(null);
   const [loading, setLoading] = useState(false);
   const [standardFields, setStandardFields] = useState([]);
   const fileInputRef = useRef(null);
@@ -20,91 +19,139 @@ function UploadWindow({ onConfirmed }) {
       .catch(err => console.error("Error fetching standard fields:", err));
   }, []);
 
-  const handleFileChange = (e) => {
+  const getAcceptType = () => {
+    if (activeTab === 'csv') return '.csv';
+    if (activeTab === 'pdf') return '.pdf';
+    return '.png,.jpg,.jpeg';
+  };
+
+  const handleFileChange = async (e) => {
     const selected = e.target.files[0];
-    if (selected && selected.name.endsWith('.csv')) {
-      setFile(selected);
-      parsePreview(selected);
+    if (!selected) return;
+
+    if (selected.size > 20 * 1024 * 1024) {
+      alert('Error: File size exceeds the 20MB limit. Please upload a smaller file.');
+      return;
+    }
+
+    setFile(selected);
+
+    if (activeTab === 'csv' && selected.name.toLowerCase().endsWith('.csv')) {
+      await uploadCSV(selected);
+    } else if (activeTab === 'pdf' && selected.name.toLowerCase().endsWith('.pdf')) {
+      await uploadDocument(selected);
+    } else if (activeTab === 'image' && (selected.name.toLowerCase().endsWith('.png') || selected.name.toLowerCase().endsWith('.jpg') || selected.name.toLowerCase().endsWith('.jpeg'))) {
+      await uploadDocument(selected);
+    } else {
+      alert(`Invalid file type for the selected tab. Expected ${getAcceptType()}`);
+      setFile(null);
     }
   };
 
-  const parsePreview = (file) => {
+  const uploadCSV = async (file) => {
+    setLoading(true);
     Papa.parse(file, {
       header: true,
-      preview: 10,
-      complete: (results) => {
-        setPreview({
-          filename: file.name,
-          headers: results.meta.fields,
-          rows: results.data
-        });
-      }
-    });
-  };
-
-  const handleContinue = async () => {
-    if (!preview) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/map_columns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_columns: preview.headers })
-      });
-      const data = await res.json();
-      setMappings(data.mappings);
-    } catch (err) {
-      console.error(err);
-      alert('Error mapping columns. Ensure backend is running.');
-    }
-    setLoading(false);
-  };
-
-  const handleConfirmMapping = async () => {
-    setLoading(true);
-    try {
-      // Re-parse whole file to get all data and map it based on user confirmation
-      Papa.parse(file, {
-        header: true,
-        complete: async (results) => {
-          const rowsToInsert = results.data.map(row => {
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rawHeaders = results.meta.fields;
+        const rawData = results.data;
+        
+        try {
+          const res = await fetch(`${API_URL}/api/map_columns`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ raw_columns: rawHeaders })
+          });
+          if (!res.ok) throw new Error("Failed to map columns");
+          const mappingData = await res.json();
+          const mappings = mappingData.mappings;
+          
+          const structuredRows = rawData.map(row => {
             const standardData = {};
             mappings.forEach(m => {
               if (m.standard_field) {
                 standardData[m.standard_field] = row[m.raw_column];
               }
             });
-            return {
-              source_file: file.name,
-              data: standardData
-            };
-          });
-
-          await fetch(`${API_URL}/api/confirm_mapping`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rows: rowsToInsert })
+            return standardData;
           });
           
-          setLoading(false);
-          onConfirmed();
+          const allKeys = new Set();
+          structuredRows.forEach(item => {
+             Object.keys(item).forEach(k => allKeys.add(k));
+          });
+          const headers = Array.from(allKeys);
+          
+          setPreview({
+            filename: file.name,
+            headers: headers,
+            rows: structuredRows
+          });
+        } catch (err) {
+          console.error(err);
+          alert('Error mapping columns automatically. Ensure backend is running.');
         }
+        setLoading(false);
+      }
+    });
+  };
+
+  const uploadDocument = async (file) => {
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(`${API_URL}/api/upload/document`, {
+        method: 'POST',
+        body: formData
       });
+      if (!res.ok) {
+         const errData = await res.json();
+         throw new Error(errData.detail || 'Upload failed');
+      }
+      const data = await res.json();
+      
+      if (data.extracted_data && data.extracted_data.length > 0) {
+        const allKeys = new Set();
+        data.extracted_data.forEach(item => {
+           Object.keys(item).forEach(k => allKeys.add(k));
+        });
+        const headers = Array.from(allKeys);
+        
+        setPreview({
+          filename: data.filename,
+          headers: headers,
+          rows: data.extracted_data
+        });
+      } else {
+        alert("No structured data could be extracted from the document.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.message);
+    }
+    setLoading(false);
+  };
+
+  const handleConfirmDocument = async () => {
+    setLoading(true);
+    try {
+      const rowsToInsert = preview.rows.map(row => ({
+        source_file: preview.filename,
+        data: row
+      }));
+      await fetch(`${API_URL}/api/confirm_mapping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: rowsToInsert })
+      });
+      setLoading(false);
+      onConfirmed();
     } catch (err) {
       console.error(err);
       setLoading(false);
     }
-  };
-
-  const handleOverride = (index, newField) => {
-    const newMappings = [...mappings];
-    newMappings[index].standard_field = newField;
-    if (newField) {
-      newMappings[index].confidence = 'high';
-    } else {
-      newMappings[index].confidence = 'unmapped';
-    }
-    setMappings(newMappings);
   };
 
   const handleResetDb = async () => {
@@ -115,133 +162,101 @@ function UploadWindow({ onConfirmed }) {
       alert(data.message);
       setFile(null);
       setPreview(null);
-      setMappings(null);
     } catch (err) {
       console.error(err);
       alert("Error resetting database.");
     }
   };
 
+  const resetUpload = () => {
+    setFile(null);
+    setPreview(null);
+  };
+
+  const changeTab = (tab) => {
+    setActiveTab(tab);
+    resetUpload();
+  };
+
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>Ingestion Module</h2>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button className="btn" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', border: '1px solid var(--border-color)' }} onClick={handleResetDb}>Reset Database</button>
-          <span className="badge badge-gray">ID: ING-01</span>
+        <h2>Document Ingestion Portal</h2>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button className="btn" onClick={handleResetDb}>
+            Clear System Database
+          </button>
+          <span className="badge badge-gray">PROG: INV_REC_01</span>
         </div>
       </div>
 
       <div className="tabs">
-        <button className={`tab ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => setActiveTab('csv')}>
-          CSV Source
+        <button className={`tab ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => changeTab('csv')}>
+          CSV Document Import
         </button>
-        <button className="tab" disabled title="Coming Soon">
-          PDF <span className="badge badge-gray" style={{marginLeft: '8px'}}>Coming Soon</span>
+        <button className={`tab ${activeTab === 'pdf' ? 'active' : ''}`} onClick={() => changeTab('pdf')}>
+          PDF Import
         </button>
-        <button className="tab" disabled title="Coming Soon">
-          Image <span className="badge badge-gray" style={{marginLeft: '8px'}}>Coming Soon</span>
+        <button className={`tab ${activeTab === 'image' ? 'active' : ''}`} onClick={() => changeTab('image')}>
+          Image Scan (PNG/JPG)
         </button>
       </div>
 
-      {activeTab === 'csv' && !mappings && (
-        <>
-          {!preview ? (
-            <div 
-              className="drop-zone"
-              onClick={() => fileInputRef.current.click()}
-            >
-              <input 
-                type="file" 
-                accept=".csv" 
-                style={{ display: 'none' }} 
-                ref={fileInputRef}
-                onChange={handleFileChange}
-              />
-              <UploadCloud size={48} className="drop-zone-icon" />
-              <h3>Select CSV Data Source</h3>
-              <p style={{color: 'var(--text-muted)', marginTop: '0.5rem'}}>Click to browse files or drop here</p>
-            </div>
-          ) : (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <FileText size={20} color="var(--accent-primary)" />
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{preview.filename}</span>
-                </div>
-                <button className="btn btn-primary" onClick={handleContinue} disabled={loading}>
-                  {loading ? 'Processing...' : 'Run Diagnostics'} <ArrowRight size={16} />
-                </button>
-              </div>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      {preview.headers.map((h, i) => (
-                        <th key={i}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.rows.map((row, i) => (
-                      <tr key={i}>
-                        {preview.headers.map((h, j) => (
-                          <td key={j}>{row[h]}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {mappings && (
+      {!preview ? (
+        <div 
+          className="drop-zone"
+          onClick={() => fileInputRef.current.click()}
+          style={{ padding: '40px 20px', border: '1px dashed var(--border-color)', backgroundColor: '#fcfcfc', cursor: 'pointer' }}
+        >
+          <input 
+            type="file" 
+            accept={getAcceptType()} 
+            style={{ display: 'none' }} 
+            ref={fileInputRef}
+            onChange={handleFileChange}
+          />
+          <UploadCloud size={32} className="drop-zone-icon" style={{ color: 'var(--accent-primary)', marginBottom: '10px' }} />
+          <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+            {activeTab === 'csv' ? 'SELECT CSV TRANSACTION SHEET (Max 20MB)' : 
+             activeTab === 'pdf' ? 'SELECT PDF INVOICE (Max 20MB)' : 'SELECT INVOICE IMAGE (Max 20MB)'}
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Click to search local directories or drop files here</p>
+        </div>
+      ) : (
         <div>
-          <h3>Review Column Mappings</h3>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>AI mapping confidence results. Please verify.</p>
-          
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Raw Column</th>
-                <th>Standard Field</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.map((m, i) => (
-                <tr key={i}>
-                  <td>
-                    {m.confidence === 'high' && <CheckCircle2 size={16} color="var(--status-green)" />}
-                    {m.confidence === 'medium' && <AlertTriangle size={16} color="var(--status-yellow)" />}
-                    {m.confidence === 'unmapped' && <XCircle size={16} color="var(--status-red)" />}
-                  </td>
-                  <td>{m.raw_column}</td>
-                  <td>
-                    <select 
-                      className="form-select" 
-                      value={m.standard_field || ''}
-                      onChange={(e) => handleOverride(i, e.target.value)}
-                    >
-                      <option value="">-- Unmapped --</option>
-                      {standardFields.map(field => (
-                        <option key={field} value={field}>{field}</option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-            <button className="btn btn-primary" onClick={handleConfirmMapping} disabled={loading}>
-              {loading ? 'Ingesting...' : 'Confirm & Ingest'} <CheckCircle2 size={16} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', backgroundColor: '#f8f9fa', padding: '6px 10px', border: '1px solid var(--border-color)', borderRadius: '2px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle2 size={16} color="green" />
+              <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>AI Extraction Complete: {preview.filename}</span>
+            </div>
+            <button className="btn btn-primary" onClick={handleConfirmDocument} disabled={loading}>
+              {loading ? 'Ingesting Record Data...' : 'Post & Ingest Invoice Document'} <CheckCircle2 size={14} />
             </button>
+          </div>
+          
+          <p style={{ color: 'var(--text-muted)', marginBottom: '10px', fontSize: '12px' }}>
+            The AI has successfully extracted the following structured data aligned to standard ERP fields. Please review before posting.
+          </p>
+
+          <div style={{ overflowX: 'auto', maxHeight: '300px', border: '1px solid var(--border-color)', marginBottom: '10px' }}>
+            <table className="data-table" style={{ margin: 0 }}>
+              <thead>
+                <tr style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                  {preview.headers.map((h, i) => (
+                    <th key={i}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {preview.rows.map((row, i) => (
+                  <tr key={i}>
+                    {preview.headers.map((h, j) => (
+                      <td key={j}>{row[h] !== null && row[h] !== undefined ? String(row[h]) : ''}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
