@@ -349,6 +349,73 @@ async def chat(request: ChatMessageRequest):
                     "payment_status": row["payment_status"]
                 })
 
+    # 6. Missing Values Across All Columns
+    if "all" in categories or "missing_value" in categories or "missing_data" in categories:
+        query = f"SELECT * FROM invoices WHERE ({base_where})"
+        cursor.execute(query, base_params)
+        all_rows = cursor.fetchall()
+        
+        seen_missing = set()
+        for row in all_rows:
+            inv_id = row["invoice_id"] or "Unknown"
+            vendor = row["vendor_name"] or "Unknown"
+            
+            for col in [
+                "invoice_id", "vendor_name", "vendor_id", "invoice_date", "due_date",
+                "line_item_description", "quantity", "unit_price", "total_amount",
+                "currency", "tax_amount", "discount", "purchase_order_number",
+                "payment_status", "department", "approver_name"
+            ]:
+                # Respect PO number requirement setting
+                if col == "purchase_order_number" and not request.context.po_numbers_required:
+                    continue
+                    
+                val = row[col]
+                if val is None or str(val).strip() == "":
+                    key = (inv_id, vendor, col)
+                    if key not in seen_missing:
+                        seen_missing.add(key)
+                        anomalies.append({
+                            "type": "Missing Value",
+                            "invoice_id": inv_id,
+                            "vendor_name": vendor,
+                            "column": col,
+                            "description": f"Field '{col}' is missing or null"
+                        })
+
+    # 7. Negative Values
+    if "all" in categories or "negative_value" in categories:
+        # If we didn't fetch all_rows in the previous step, fetch them now
+        if not ("all" in categories or "missing_value" in categories or "missing_data" in categories):
+            query = f"SELECT * FROM invoices WHERE ({base_where})"
+            cursor.execute(query, base_params)
+            all_rows = cursor.fetchall()
+            
+        seen_negatives = set()
+        for row in all_rows:
+            inv_id = row["invoice_id"] or "Unknown"
+            vendor = row["vendor_name"] or "Unknown"
+            
+            for col in ["quantity", "unit_price", "total_amount", "tax_amount", "discount"]:
+                val = row[col]
+                if val is not None:
+                    try:
+                        num_val = float(val)
+                        if num_val < 0:
+                            key = (inv_id, vendor, col, num_val)
+                            if key not in seen_negatives:
+                                seen_negatives.add(key)
+                                anomalies.append({
+                                    "type": "Negative Value",
+                                    "invoice_id": inv_id,
+                                    "vendor_name": vendor,
+                                    "column": col,
+                                    "value": num_val,
+                                    "description": f"Field '{col}' has a negative value ({num_val})"
+                                })
+                    except (ValueError, TypeError):
+                        pass
+
     conn.close()
     
     if not anomalies:
@@ -376,7 +443,9 @@ async def chat(request: ChatMessageRequest):
         "amount": "",
         "currency": "",
         "po": "",
-        "payment_status": ""
+        "payment_status": "",
+        "missing_data": "",
+        "negative_value": ""
     })
     
     for a in filtered_anomalies:
@@ -420,9 +489,24 @@ async def chat(request: ChatMessageRequest):
                 record["payment_status"] = status_val
             elif status_val not in existing:
                 record["payment_status"] = existing + f"; {status_val}"
+        elif t == "Missing Value":
+            col_val = a.get("column")
+            existing = record["missing_data"]
+            if not existing:
+                record["missing_data"] = f"Missing {col_val}"
+            else:
+                record["missing_data"] = existing + f"; Missing {col_val}"
+        elif t == "Negative Value":
+            col_val = a.get("column")
+            val_val = a.get("value")
+            existing = record["negative_value"]
+            if not existing:
+                record["negative_value"] = f"Negative {col_val} ({val_val})"
+            else:
+                record["negative_value"] = existing + f"; Negative {col_val} ({val_val})"
 
     raw_csv_lines = [
-        "Invoice ID,Vendor,Duplicate Issues,Date Issues,Amount Issues,Currency Issues,PO Issues,Payment Status Issues"
+        "Invoice ID,Vendor,Duplicate Issues,Date Issues,Amount Issues,Currency Issues,PO Issues,Payment Status Issues,Missing Data Issues,Negative Value Issues"
     ]
     for inv_id, data in invoice_data.items():
         vendor_escaped = data["vendor"].replace('"', '""')
@@ -432,9 +516,11 @@ async def chat(request: ChatMessageRequest):
         curr_escaped = data["currency"].replace('"', '""')
         po_escaped = data["po"].replace('"', '""')
         status_escaped = data["payment_status"].replace('"', '""')
+        missing_escaped = data["missing_data"].replace('"', '""')
+        negative_escaped = data["negative_value"].replace('"', '""')
         
         raw_csv_lines.append(
-            f'"{inv_id}","{vendor_escaped}","{dup_escaped}","{date_escaped}","{amt_escaped}","{curr_escaped}","{po_escaped}","{status_escaped}"'
+            f'"{inv_id}","{vendor_escaped}","{dup_escaped}","{date_escaped}","{amt_escaped}","{curr_escaped}","{po_escaped}","{status_escaped}","{missing_escaped}","{negative_escaped}"'
         )
         
     return ChatMessageResponse(

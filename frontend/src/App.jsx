@@ -10,60 +10,107 @@ function App() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* ERP Top System Bar */}
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)' }}>
+      {/* Modern SaaS Navigation Header */}
       <header style={{ 
-        backgroundColor: 'var(--accent-primary)', 
-        color: '#ffffff', 
-        padding: '8px 20px', 
+        backgroundColor: 'var(--bg-card)', 
+        borderBottom: '1px solid var(--border-color)',
+        padding: '14px 24px', 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        fontFamily: 'var(--font-sans)',
-        fontSize: '12px',
-        borderBottom: '2px solid #0a2540',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.02)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <span style={{ fontWeight: 'bold', fontSize: '14px', letterSpacing: '0.5px' }}>
-            ENTERPRISE INVOICE VERIFICATION
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Minimalist Logo Icon */}
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--accent-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontWeight: 'bold',
+              fontSize: '18px'
+            }}>
+              E
+            </div>
+            <span style={{ 
+              fontWeight: '700', 
+              fontSize: '18px', 
+              letterSpacing: '-0.02em', 
+              color: 'var(--text-main)' 
+            }}>
+              Experto<span style={{ color: 'var(--accent-primary)', fontWeight: '500' }}>.ai</span>
+            </span>
+          </div>
+          <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-color)' }}></div>
           <span style={{ 
-            backgroundColor: '#0a2540', 
-            color: '#00bcd4', 
-            padding: '2px 6px', 
-            borderRadius: '2px', 
+            fontSize: '12px',
             fontFamily: 'var(--font-mono)', 
-            fontWeight: 'bold',
-            fontSize: '11px' 
+            color: 'var(--text-light)',
+            backgroundColor: '#f1f5f9',
+            padding: '4px 8px',
+            borderRadius: '6px',
+            fontWeight: '500'
           }}>
-            t-code: INV_ANOMALY
+            v1.0.4
           </span>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div>
-            <span style={{ color: '#a0aec0', marginRight: '6px' }}>MODULE:</span>
-            <span style={{ fontWeight: '600' }}>
-              {currentView === 'upload' ? 'DOCUMENT_INGESTION' : 'AUDIT_VERIFICATION'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', fontSize: '13px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: 'var(--text-light)' }}>Workspace:</span>
+            <span style={{ 
+              fontWeight: '600', 
+              color: 'var(--text-main)',
+              backgroundColor: 'var(--bg-page)',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color)'
+            }}>
+              {currentView === 'upload' ? 'Document Ingestion' : 'Audit Exception Control'}
             </span>
           </div>
-          <div style={{ width: '1px', height: '14px', backgroundColor: '#4a5568' }}></div>
-          <div>
-            <span style={{ color: '#a0aec0', marginRight: '6px' }}>OPERATOR:</span>
-            <span style={{ fontWeight: '600' }}>AUDIT_SYS_USER</span>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%', 
+              backgroundColor: 'var(--status-green)',
+              position: 'relative'
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                borderRadius: '50%',
+                backgroundColor: 'var(--status-green)',
+                opacity: 0.4,
+                animation: 'pulse-ring 2s infinite'
+              }}></div>
+            </div>
+            <span style={{ fontWeight: '500', color: 'var(--text-muted)' }}>Audit Engine Online</span>
           </div>
         </div>
       </header>
 
-      {/* Main ERP Client Area */}
-      <div className="container" style={{ flex: 1, padding: '20px' }}>
-        {currentView === 'upload' ? (
-          <UploadWindow onConfirmed={handleMappingConfirmed} />
-        ) : (
-          <ChatWindow />
-        )}
-      </div>
+      {/* Main Client Area */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div className="container" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          {currentView === 'upload' ? (
+            <UploadWindow onConfirmed={handleMappingConfirmed} />
+          ) : (
+            <ChatWindow />
+          )}
+        </div>
+      </main>
     </div>
   );
 }

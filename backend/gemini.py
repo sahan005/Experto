@@ -83,7 +83,7 @@ async def validate_and_parse_query(user_message: str) -> dict:
         "You are an AI that validates and parses user queries about invoice anomalies into structured database filters.\n"
         "If the query is completely unrelated to invoices, anomalies, vendors, or finance, set 'is_valid' to false and provide a 'reason'.\n"
         "Otherwise, set 'is_valid' to true, and extract any specific filters mentioned in the query into the 'filters' object.\n"
-        "The 'categories' array should contain one or more of: ['po_number', 'currency', 'duplicate', 'vendor_name', 'date', 'amount', 'payment_status', 'all'].\n"
+        "The 'categories' array should contain one or more of: ['po_number', 'currency', 'duplicate', 'vendor_name', 'date', 'amount', 'payment_status', 'missing_value', 'negative_value', 'all'].\n"
         "Only include specific filter values (like vendor_name, min_amount, max_amount, start_date, end_date, payment_status) if explicitly mentioned. Dates should be in YYYY-MM-DD format.\n"
         "Return ONLY a JSON object matching this exact structure:\n"
         "{\n"
