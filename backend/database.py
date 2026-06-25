@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from dotenv import load_dotenv
+import bcrypt
 
 load_dotenv()
 
@@ -47,6 +48,36 @@ def init_db():
         upload_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    # Table 3: users
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        hashed_password TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user'
+    )
+    """)
+
+    # Table 4: vendors
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS vendors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendor_name TEXT UNIQUE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active'
+    )
+    """)
+
+    # Table 5: category_rules
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS category_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_name TEXT UNIQUE NOT NULL,
+        min_price REAL,
+        max_price REAL,
+        expected_tax_rate REAL
+    )
+    """)
     
     # Seed canonical invoice field names into standard_schema
     canonical_fields = [
@@ -58,6 +89,14 @@ def init_db():
     
     for field in canonical_fields:
         cursor.execute("INSERT OR IGNORE INTO standard_schema (field_name) VALUES (?)", (field,))
+
+    # Seed Admin User
+    cursor.execute("SELECT * FROM users WHERE email = 'admin@experto.ai'")
+    admin_exists = cursor.fetchone()
+    if not admin_exists:
+        hashed_password = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        cursor.execute("INSERT INTO users (email, hashed_password, role) VALUES (?, ?, ?)", 
+                       ("admin@experto.ai", hashed_password, "admin"))
         
     conn.commit()
     conn.close()

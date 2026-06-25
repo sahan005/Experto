@@ -1,5 +1,27 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Any
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    role: str
+
+class VendorStatusUpdate(BaseModel):
+    status: str # "active" or "blocked"
+
+class CategoryRuleCreate(BaseModel):
+    category_name: str
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    expected_tax_rate: Optional[float] = None
 
 class ColumnMappingRequest(BaseModel):
     raw_columns: List[str]

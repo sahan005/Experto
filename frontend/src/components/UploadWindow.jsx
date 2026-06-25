@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useContext } from 'react';
 import { UploadCloud, CheckCircle2, FileText, ArrowRight, Trash2, Loader2, Database } from 'lucide-react';
 import Papa from 'papaparse';
+import { AuthContext } from '../context/AuthContext';
 
 const API_URL = 'http://localhost:8081';
 
 function UploadWindow({ onConfirmed }) {
+  const { token, user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('csv');
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -215,11 +217,20 @@ function UploadWindow({ onConfirmed }) {
   const handleResetDb = async () => {
     if (!confirm("Are you sure you want to delete all invoices from the database? This action cannot be undone.")) return;
     try {
-      const res = await fetch(`${API_URL}/api/reset_db`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/reset_db`, { 
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await res.json();
-      alert(data.message);
-      setFile(null);
-      setPreview(null);
+      if (res.ok) {
+        alert(data.message);
+        setFile(null);
+        setPreview(null);
+      } else {
+        alert(data.detail || "Error resetting database.");
+      }
     } catch (err) {
       console.error(err);
       alert("Error resetting database.");
@@ -250,9 +261,11 @@ function UploadWindow({ onConfirmed }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button className="btn btn-danger" onClick={handleResetDb} style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Trash2 size={14} /> Clear System DB
-          </button>
+          {user?.role === 'admin' && (
+            <button className="btn btn-danger" onClick={handleResetDb} style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Trash2 size={14} /> Clear System DB
+            </button>
+          )}
         </div>
       </div>
 

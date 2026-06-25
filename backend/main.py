@@ -9,8 +9,61 @@ from typing import List, Dict, Any
 
 from models import (
     ColumnMappingRequest, ColumnMappingResponse, MappedColumn,
-    ConfirmMappingRequest, ChatMessageRequest, ChatMessageResponse
+    ConfirmMappingRequest, ChatMessageRequest, ChatMessageResponse,
+    UserLogin, Token, UserResponse, VendorStatusUpdate, CategoryRuleCreate
 )
+import bcrypt
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer
+
+SECRET_KEY = "your-secret-key-here"  # In production, use os.environ
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # 24 hours
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+def verify_password(plain_password, hashed_password):
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+def get_password_hash(password):
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        role: str = payload.get("role")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, role FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if user is None:
+        raise credentials_exception
+    return dict(user)
+
+async def get_admin_user(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    return current_user
 from database import init_db, get_db
 from gemini import map_columns_via_gemini, narrate_anomalies_via_gemini, validate_and_parse_query, extract_invoice_data_via_gemini
 
@@ -29,6 +82,263 @@ app.add_middleware(
 def startup_event():
     init_db()
 
+@app.post("/api/auth/login", response_model=Token)
+async def login(user_data: UserLogin):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = ?", (user_data.email,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user or not verify_password(user_data.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+        
+    access_token = create_access_token(data={"sub": user["email"], "role": user["role"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/api/auth/register", response_model=UserResponse)
+async def register(user_data: UserLogin, admin: dict = Depends(get_admin_user)):
+    # Only admins can register new users
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = ?", (user_data.email,))
+    if cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Email already registered")
+        
+    hashed_password = get_password_hash(user_data.password)
+    cursor.execute("INSERT INTO users (email, hashed_password, role) VALUES (?, ?, ?)", 
+                   (user_data.email, hashed_password, "user"))
+    user_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return UserResponse(id=user_id, email=user_data.email, role="user")
+
+@app.get("/api/auth/me", response_model=UserResponse)
+async def read_users_me(current_user: dict = Depends(get_current_user)):
+    return UserResponse(**current_user)
+
+@app.get("/api/admin/dashboard")
+async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Simple metrics
+    cursor.execute("SELECT COUNT(*) as total_invoices FROM invoices")
+    total_invoices = cursor.fetchone()["total_invoices"]
+    
+    cursor.execute("SELECT SUM(total_amount) as total_spend FROM invoices")
+    total_spend = cursor.fetchone()["total_spend"] or 0
+    
+    cursor.execute("SELECT department, SUM(total_amount) as spend FROM invoices GROUP BY department")
+    spend_by_dept = [dict(row) for row in cursor.fetchall()]
+    
+    cursor.execute("SELECT vendor_name, COUNT(*) as count FROM invoices GROUP BY vendor_name ORDER BY count DESC LIMIT 5")
+    top_vendors = [dict(row) for row in cursor.fetchall()]
+
+    # Daily processing volume
+    cursor.execute("""
+        SELECT 
+            invoice_date as date, 
+            SUM(total_amount) as amount, 
+            COUNT(DISTINCT invoice_id) as count
+        FROM invoices 
+        WHERE invoice_date IS NOT NULL AND invoice_date != ''
+        GROUP BY invoice_date
+        ORDER BY invoice_date ASC
+    """)
+    daily_totals = [dict(row) for row in cursor.fetchall()]
+
+    # Compute anomalies count dynamically for the entire DB
+    # 1. Missing PO Numbers
+    cursor.execute("""
+        SELECT invoice_id, vendor_name 
+        FROM invoices 
+        GROUP BY source_file, invoice_id, vendor_name 
+        HAVING MAX(purchase_order_number) IS NULL OR MAX(purchase_order_number) = ''
+    """)
+    po_anomalies = len(cursor.fetchall())
+    
+    # 2. Unexpected Currency (assume 'USD' is expected)
+    cursor.execute("SELECT COUNT(DISTINCT invoice_id) as count FROM invoices WHERE currency != 'USD' AND currency IS NOT NULL AND currency != ''")
+    currency_anomalies = cursor.fetchone()["count"]
+    
+    # 3. Duplicate Invoices
+    cursor.execute("""
+        SELECT invoice_id, COUNT(DISTINCT source_file) as file_count
+        FROM invoices 
+        WHERE invoice_id IS NOT NULL AND invoice_id != ''
+        GROUP BY invoice_id
+        HAVING file_count > 1
+    """)
+    dup_anomalies = len(cursor.fetchall())
+    
+    # 4. Invalid Date Format
+    cursor.execute("SELECT DISTINCT invoice_id, invoice_date FROM invoices WHERE invoice_date IS NOT NULL AND invoice_date != ''")
+    date_anomalies = 0
+    for row in cursor.fetchall():
+        try:
+            datetime.strptime(row["invoice_date"], "%Y-%m-%d")
+        except ValueError:
+            date_anomalies += 1
+
+    # 5. Missing Values (except PO number)
+    standard_fields = [
+        "invoice_id", "vendor_name", "vendor_id", "invoice_date", "due_date",
+        "line_item_description", "quantity", "unit_price", "total_amount",
+        "currency", "tax_amount", "discount", "payment_status", "department", "approver_name"
+    ]
+    cursor.execute("SELECT * FROM invoices")
+    all_rows = cursor.fetchall()
+    
+    seen_missing = set()
+    missing_anomalies = 0
+    for row in all_rows:
+        inv_id = row["invoice_id"] or "Unknown"
+        vendor = row["vendor_name"] or "Unknown"
+        for col in standard_fields:
+            val = row[col]
+            if val is None or str(val).strip() == "":
+                key = (inv_id, vendor, col)
+                if key not in seen_missing:
+                    seen_missing.add(key)
+                    missing_anomalies += 1
+                    
+    # 6. Negative Values
+    seen_negatives = set()
+    negative_anomalies = 0
+    for row in all_rows:
+        inv_id = row["invoice_id"] or "Unknown"
+        vendor = row["vendor_name"] or "Unknown"
+        for col in ["quantity", "unit_price", "total_amount", "tax_amount", "discount"]:
+            val = row[col]
+            if val is not None:
+                try:
+                    num_val = float(val)
+                    if num_val < 0:
+                        key = (inv_id, vendor, col, num_val)
+                        if key not in seen_negatives:
+                            seen_negatives.add(key)
+                            negative_anomalies += 1
+                except (ValueError, TypeError):
+                    pass
+                    
+    # 7. Vendor Status Warning
+    cursor.execute("SELECT vendor_name FROM vendors WHERE status = 'blocked'")
+    blocked_vendors = {r["vendor_name"] for r in cursor.fetchall()}
+    seen_vendor_warnings = set()
+    vendor_warnings = 0
+    for row in all_rows:
+        vendor = row["vendor_name"] or "Unknown"
+        if vendor in blocked_vendors:
+            if vendor not in seen_vendor_warnings:
+                seen_vendor_warnings.add(vendor)
+                vendor_warnings += 1
+                
+    # 8. Category Pricing Rules
+    cursor.execute("SELECT * FROM category_rules")
+    category_rules = {r["category_name"]: dict(r) for r in cursor.fetchall()}
+    pricing_anomalies = 0
+    for row in all_rows:
+        desc = row["line_item_description"]
+        if desc and desc in category_rules:
+            rule = category_rules[desc]
+            price = row["unit_price"]
+            if price is not None:
+                try:
+                    p = float(price)
+                    if rule["min_price"] is not None and p < rule["min_price"]:
+                        pricing_anomalies += 1
+                    elif rule["max_price"] is not None and p > rule["max_price"]:
+                        pricing_anomalies += 1
+                except (ValueError, TypeError):
+                    pass
+                    
+    total_anomalies = (
+        po_anomalies + 
+        currency_anomalies + 
+        dup_anomalies + 
+        date_anomalies + 
+        missing_anomalies + 
+        negative_anomalies + 
+        vendor_warnings + 
+        pricing_anomalies
+    )
+    
+    conn.close()
+    return {
+        "total_invoices": total_invoices,
+        "total_spend": total_spend,
+        "spend_by_department": spend_by_dept,
+        "top_vendors": top_vendors,
+        "daily_totals": daily_totals,
+        "total_anomalies": total_anomalies
+    }
+
+@app.get("/api/admin/vendors")
+async def get_vendors(admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    # Fetch all unique vendor names from invoices, and left join with their status in vendors table.
+    # If not present in vendors table, status defaults to 'active'.
+    cursor.execute("""
+        SELECT DISTINCT i.vendor_name, COALESCE(v.status, 'active') as status
+        FROM invoices i
+        LEFT JOIN vendors v ON i.vendor_name = v.vendor_name
+        WHERE i.vendor_name IS NOT NULL AND i.vendor_name != ''
+    """)
+    vendors = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return vendors
+
+@app.get("/api/admin/users", response_model=List[UserResponse])
+async def get_users(admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, role FROM users")
+    users = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return users
+
+@app.get("/api/admin/rules")
+async def get_rules(admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM category_rules")
+    rules = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rules
+
+@app.post("/api/admin/rules")
+async def create_rule(rule: CategoryRuleCreate, admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO category_rules (category_name, min_price, max_price, expected_tax_rate) 
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(category_name) DO UPDATE SET 
+            min_price=excluded.min_price, 
+            max_price=excluded.max_price, 
+            expected_tax_rate=excluded.expected_tax_rate
+    """, (rule.category_name, rule.min_price, rule.max_price, rule.expected_tax_rate))
+    conn.commit()
+    conn.close()
+    return {"message": "Rule saved successfully"}
+
+@app.put("/api/admin/vendors/{vendor_name}/status")
+async def update_vendor_status(vendor_name: str, status_update: VendorStatusUpdate, admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    # Insert or update
+    cursor.execute("""
+        INSERT INTO vendors (vendor_name, status) VALUES (?, ?)
+        ON CONFLICT(vendor_name) DO UPDATE SET status=excluded.status
+    """, (vendor_name, status_update.status))
+    conn.commit()
+    conn.close()
+    return {"message": f"Vendor {vendor_name} status updated to {status_update.status}"}
+
 @app.get("/api/standard_fields")
 async def get_standard_fields():
     conn = get_db()
@@ -39,7 +349,7 @@ async def get_standard_fields():
     return {"standard_fields": standard_fields}
 
 @app.post("/api/reset_db")
-async def reset_db():
+async def reset_db(admin: dict = Depends(get_admin_user)):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM invoices")
@@ -349,12 +659,12 @@ async def chat(request: ChatMessageRequest):
                     "payment_status": row["payment_status"]
                 })
 
+    query = f"SELECT * FROM invoices WHERE ({base_where})"
+    cursor.execute(query, base_params)
+    all_rows = cursor.fetchall()
+
     # 6. Missing Values Across All Columns
     if "all" in categories or "missing_value" in categories or "missing_data" in categories:
-        query = f"SELECT * FROM invoices WHERE ({base_where})"
-        cursor.execute(query, base_params)
-        all_rows = cursor.fetchall()
-        
         seen_missing = set()
         for row in all_rows:
             inv_id = row["invoice_id"] or "Unknown"
@@ -385,12 +695,6 @@ async def chat(request: ChatMessageRequest):
 
     # 7. Negative Values
     if "all" in categories or "negative_value" in categories:
-        # If we didn't fetch all_rows in the previous step, fetch them now
-        if not ("all" in categories or "missing_value" in categories or "missing_data" in categories):
-            query = f"SELECT * FROM invoices WHERE ({base_where})"
-            cursor.execute(query, base_params)
-            all_rows = cursor.fetchall()
-            
         seen_negatives = set()
         for row in all_rows:
             inv_id = row["invoice_id"] or "Unknown"
@@ -415,6 +719,53 @@ async def chat(request: ChatMessageRequest):
                                 })
                     except (ValueError, TypeError):
                         pass
+
+    # 8. Vendor Status Warning (RBAC)
+    cursor.execute("SELECT vendor_name FROM vendors WHERE status = 'blocked'")
+    blocked_vendors = {r["vendor_name"] for r in cursor.fetchall()}
+    
+    # 9. Category Pricing Rules (RBAC)
+    cursor.execute("SELECT * FROM category_rules")
+    category_rules = {r["category_name"]: dict(r) for r in cursor.fetchall()}
+    
+    seen_vendor_warnings = set()
+    for row in all_rows:
+        inv_id = row["invoice_id"] or "Unknown"
+        vendor = row["vendor_name"] or "Unknown"
+        
+        if vendor in blocked_vendors:
+            if vendor not in seen_vendor_warnings:
+                seen_vendor_warnings.add(vendor)
+                anomalies.append({
+                    "type": "Vendor Status Warning",
+                    "invoice_id": inv_id,
+                    "vendor_name": vendor,
+                    "description": f"Vendor '{vendor}' currently has a suspended status in our system. Verify before proceeding."
+                })
+                
+        desc = row["line_item_description"]
+        if desc and desc in category_rules:
+            rule = category_rules[desc]
+            price = row["unit_price"]
+            if price is not None:
+                try:
+                    p = float(price)
+                    if rule["min_price"] is not None and p < rule["min_price"]:
+                        anomalies.append({
+                            "type": "Pricing Anomaly",
+                            "invoice_id": inv_id,
+                            "vendor_name": vendor,
+                            "description": f"Unit price for '{desc}' (${p}) is below Admin limit (${rule['min_price']})."
+                        })
+                    if rule["max_price"] is not None and p > rule["max_price"]:
+                        anomalies.append({
+                            "type": "Pricing Anomaly",
+                            "invoice_id": inv_id,
+                            "vendor_name": vendor,
+                            "description": f"Unit price for '{desc}' (${p}) exceeds Admin limit (${rule['max_price']})."
+                        })
+                except (ValueError, TypeError):
+                    pass
 
     conn.close()
     
@@ -445,7 +796,8 @@ async def chat(request: ChatMessageRequest):
         "po": "",
         "payment_status": "",
         "missing_data": "",
-        "negative_value": ""
+        "negative_value": "",
+        "rbac_rule": ""
     })
     
     for a in filtered_anomalies:
@@ -504,9 +856,16 @@ async def chat(request: ChatMessageRequest):
                 record["negative_value"] = f"Negative {col_val} ({val_val})"
             else:
                 record["negative_value"] = existing + f"; Negative {col_val} ({val_val})"
+        elif t in ["Vendor Status Warning", "Pricing Anomaly"]:
+            desc = a.get("description", "")
+            existing = record["rbac_rule"]
+            if not existing:
+                record["rbac_rule"] = desc
+            else:
+                record["rbac_rule"] = existing + f"; {desc}"
 
     raw_csv_lines = [
-        "Invoice ID,Vendor,Duplicate Issues,Date Issues,Amount Issues,Currency Issues,PO Issues,Payment Status Issues,Missing Data Issues,Negative Value Issues"
+        "Invoice ID,Vendor,Duplicate Issues,Date Issues,Amount Issues,Currency Issues,PO Issues,Payment Status Issues,Missing Data Issues,Negative Value Issues,RBAC Rule Issues"
     ]
     for inv_id, data in invoice_data.items():
         vendor_escaped = data["vendor"].replace('"', '""')
@@ -518,9 +877,10 @@ async def chat(request: ChatMessageRequest):
         status_escaped = data["payment_status"].replace('"', '""')
         missing_escaped = data["missing_data"].replace('"', '""')
         negative_escaped = data["negative_value"].replace('"', '""')
+        rbac_escaped = data["rbac_rule"].replace('"', '""')
         
         raw_csv_lines.append(
-            f'"{inv_id}","{vendor_escaped}","{dup_escaped}","{date_escaped}","{amt_escaped}","{curr_escaped}","{po_escaped}","{status_escaped}","{missing_escaped}","{negative_escaped}"'
+            f'"{inv_id}","{vendor_escaped}","{dup_escaped}","{date_escaped}","{amt_escaped}","{curr_escaped}","{po_escaped}","{status_escaped}","{missing_escaped}","{negative_escaped}","{rbac_escaped}"'
         )
         
     return ChatMessageResponse(

@@ -1,13 +1,32 @@
-import { useState } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import UploadWindow from './components/UploadWindow';
 import ChatWindow from './components/ChatWindow';
+import LoginWindow from './components/LoginWindow';
+import AdminDashboard from './components/AdminDashboard';
+import { AuthContext } from './context/AuthContext';
 
 function App() {
-  const [currentView, setCurrentView] = useState('upload'); // 'upload' or 'chat'
+  const { user, logout } = useContext(AuthContext);
+  const [currentView, setCurrentView] = useState(user?.role === 'admin' ? 'dashboard' : 'upload');
+  
+  // Automatically route user to correct dashboard on login
+  useEffect(() => {
+    if (user) {
+      setCurrentView(user.role === 'admin' ? 'dashboard' : 'upload');
+    }
+  }, [user]);
   
   const handleMappingConfirmed = () => {
     setCurrentView('chat');
   };
+
+  if (!user) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
+        <LoginWindow />
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)' }}>
@@ -64,16 +83,24 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px', fontSize: '13px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: 'var(--text-light)' }}>Workspace:</span>
-            <span style={{ 
-              fontWeight: '600', 
-              color: 'var(--text-main)',
-              backgroundColor: 'var(--bg-page)',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-color)'
-            }}>
-              {currentView === 'upload' ? 'Document Ingestion' : 'Audit Exception Control'}
-            </span>
+            <select 
+              value={currentView}
+              onChange={(e) => setCurrentView(e.target.value)}
+              style={{
+                fontWeight: '600', 
+                color: 'var(--text-main)',
+                backgroundColor: 'var(--bg-page)',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              {user?.role === 'admin' && <option value="dashboard">Admin Dashboard</option>}
+              <option value="upload">Document Ingestion</option>
+              <option value="chat">Audit Exception Control</option>
+            </select>
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -98,15 +125,45 @@ function App() {
             </div>
             <span style={{ fontWeight: '500', color: 'var(--text-muted)' }}>Audit Engine Online</span>
           </div>
+
+          <button 
+            onClick={logout}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-light)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer'
+            }}
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
       {/* Main Client Area */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div className="container" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          {currentView === 'upload' ? (
+        <div className="container" style={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          justifyContent: 'flex-start',
+          paddingTop: '24px',
+          paddingBottom: '48px',
+          width: '100%',
+          maxWidth: '100%',
+          alignItems: 'stretch'
+        }}>
+          {currentView === 'dashboard' && user?.role === 'admin' && (
+            <AdminDashboard />
+          )}
+          {currentView === 'upload' && (
             <UploadWindow onConfirmed={handleMappingConfirmed} />
-          ) : (
+          )}
+          {currentView === 'chat' && (
             <ChatWindow />
           )}
         </div>
