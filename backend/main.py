@@ -125,7 +125,7 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     cursor = conn.cursor()
     
     # Simple metrics
-    cursor.execute("SELECT COUNT(*) as total_invoices FROM invoices")
+    cursor.execute("SELECT COUNT(DISTINCT source_file) as total_invoices FROM invoices")
     total_invoices = cursor.fetchone()["total_invoices"]
     
     cursor.execute("SELECT SUM(total_amount) as total_spend FROM invoices")
@@ -137,16 +137,16 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     cursor.execute("SELECT vendor_name, COUNT(*) as count FROM invoices GROUP BY vendor_name ORDER BY count DESC LIMIT 5")
     top_vendors = [dict(row) for row in cursor.fetchall()]
 
-    # Daily processing volume
+    # Daily processing volume (grouped by upload/processing date)
     cursor.execute("""
         SELECT 
-            invoice_date as date, 
+            DATE(upload_timestamp) as date, 
             SUM(total_amount) as amount, 
-            COUNT(DISTINCT invoice_id) as count
+            COUNT(DISTINCT source_file) as count
         FROM invoices 
-        WHERE invoice_date IS NOT NULL AND invoice_date != ''
-        GROUP BY invoice_date
-        ORDER BY invoice_date ASC
+        WHERE upload_timestamp IS NOT NULL
+        GROUP BY DATE(upload_timestamp)
+        ORDER BY DATE(upload_timestamp) ASC
     """)
     daily_totals = [dict(row) for row in cursor.fetchall()]
 

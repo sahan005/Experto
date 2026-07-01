@@ -44,27 +44,26 @@ function LoginWindow() {
           {/* Brand Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '40px' }}>
             <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--accent-primary)',
+              width: '32px',
+              height: '32px',
+              borderRadius: '4px',
+              backgroundColor: 'var(--sap-accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#ffffff',
               fontWeight: 'bold',
-              fontSize: '20px',
-              boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)'
+              fontSize: '16px'
             }}>
               E
             </div>
             <span style={{ 
               fontWeight: '800', 
-              fontSize: '20px', 
-              letterSpacing: '-0.02em', 
+              fontSize: '18px', 
+              letterSpacing: '-0.01em', 
               color: '#ffffff' 
             }}>
-              Experto<span style={{ color: '#818cf8', fontWeight: '500' }}>.ai</span>
+              Experto<span style={{ color: '#5bb2ff', fontWeight: '500' }}>.ai</span>
             </span>
           </div>
 
@@ -111,7 +110,7 @@ function LoginWindow() {
         </div>
 
         {/* Footer info */}
-        <div style={{ display: 'flex', gap: '16px', fontSize: '11px', color: '#64748b', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px', marginTop: '32px' }}>
+        <div style={{ display: 'flex', gap: '16px', fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px', marginTop: '32px' }}>
           <span>© 2026 Experto AI.</span>
           <span>Enterprise Compliance Assured.</span>
         </div>
@@ -119,11 +118,11 @@ function LoginWindow() {
 
       {/* Right: Sign-In Form Panel */}
       <div className="login-form-panel">
-        <div style={{ marginBottom: '32px' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+        <div style={{ marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--sap-text-color)', letterSpacing: '-0.01em', marginBottom: '6px' }}>
             Access your workspace
           </h2>
-          <p style={{ color: 'var(--text-light)', fontSize: '13px', fontWeight: '500' }}>
+          <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', fontWeight: '500' }}>
             Enter your credentials to enter the audit dashboard.
           </p>
         </div>
@@ -165,10 +164,10 @@ function LoginWindow() {
               alignItems: 'center', 
               gap: '8px', 
               padding: '10px 14px', 
-              backgroundColor: 'var(--status-red-bg)', 
-              color: 'var(--status-red)', 
-              border: '1px solid var(--status-red-border)',
-              borderRadius: '8px', 
+              backgroundColor: 'var(--sap-error-bg)', 
+              color: 'var(--sap-error-text)', 
+              border: '1px solid var(--sap-error-border)',
+              borderRadius: '6px', 
               fontSize: '12px', 
               fontWeight: '600' 
             }}>
@@ -182,9 +181,9 @@ function LoginWindow() {
             disabled={isLoading}
             className="btn btn-primary"
             style={{
-              padding: '12px',
-              borderRadius: '8px',
-              fontSize: '14px',
+              padding: '10px',
+              borderRadius: '6px',
+              fontSize: '13px',
               marginTop: '8px',
               display: 'flex',
               alignItems: 'center',
@@ -194,7 +193,7 @@ function LoginWindow() {
           >
             {isLoading ? (
               <>
-                <Loader2 className="animate-spin" size={16} style={{ animation: 'spin 1.5s linear infinite' }} />
+                <Loader2 className="animate-spin" size={14} style={{ animation: 'spin 1.5s linear infinite' }} />
                 Authenticating...
               </>
             ) : (
@@ -207,16 +206,16 @@ function LoginWindow() {
 
         {/* Demo Credentials Helper */}
         <div style={{ 
-          marginTop: '28px', 
-          padding: '12px 16px', 
-          backgroundColor: 'var(--bg-page)', 
-          borderRadius: '8px', 
-          border: '1px solid var(--border-color)',
+          marginTop: '24px', 
+          padding: '10px 14px', 
+          backgroundColor: 'var(--sap-bg)', 
+          borderRadius: '6px', 
+          border: '1px solid var(--sap-border)',
           fontSize: '12px',
-          color: 'var(--text-muted)',
+          color: 'var(--sap-text-muted)',
           lineHeight: '1.5'
         }}>
-          <span style={{ fontWeight: '700', color: 'var(--text-main)', display: 'block', marginBottom: '2px' }}>
+          <span style={{ fontWeight: '700', color: 'var(--sap-text-color)', display: 'block', marginBottom: '2px' }}>
             Proof of Concept Portal
           </span>
           Use seeded accounts to sign in (e.g. administrator or audit operator credentials).

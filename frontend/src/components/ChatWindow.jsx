@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Send, Download, AlertCircle, RefreshCw, Settings, Layers, ShieldAlert, Calendar, DollarSign, CheckSquare, Loader2 } from 'lucide-react';
+import { Send, Download, AlertCircle, RefreshCw, Settings, ShieldAlert, Calendar, DollarSign, CheckSquare, Loader2 } from 'lucide-react';
 
 const API_URL = 'http://localhost:8081';
 
@@ -15,16 +15,7 @@ function ChatWindow() {
   });
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [standardFields, setStandardFields] = useState([]);
   const chatHistoryEndRef = useRef(null);
-
-  // Fetch standard fields from backend for reference list
-  useEffect(() => {
-    fetch(`${API_URL}/api/standard_fields`)
-      .then(res => res.json())
-      .then(data => setStandardFields(data.standard_fields || []))
-      .catch(err => console.error("Error fetching standard fields:", err));
-  }, []);
 
   // Scroll to bottom of chat history when messages change
   useEffect(() => {
@@ -121,32 +112,32 @@ function ChatWindow() {
   if (!onboardingComplete) {
     if (chatMutation.isPending) {
       return (
-        <div className="panel" style={{ maxWidth: '600px', width: '100%', margin: '40px auto', textAlign: 'center', padding: '48px 32px', animation: 'slide-in 0.3s ease' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+        <div className="panel" style={{ maxWidth: '600px', width: '100%', margin: '40px auto', textAlign: 'center', padding: '40px 24px', animation: 'slide-in 0.3s ease' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
             <div style={{ 
-              backgroundColor: '#f1f3fe', 
-              width: '80px', 
-              height: '80px', 
+              backgroundColor: 'var(--sap-accent-light)', 
+              width: '64px', 
+              height: '64px', 
               borderRadius: '50%', 
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'center',
-              boxShadow: '0 4px 15px rgba(79, 70, 229, 0.1)',
+              border: '1px solid rgba(10, 110, 209, 0.15)',
               position: 'relative'
             }}>
-              <Loader2 className="animate-spin" size={32} style={{ color: 'var(--accent-primary)', animation: 'spin 1.5s linear infinite' }} />
+              <Loader2 className="animate-spin" size={24} style={{ color: 'var(--sap-accent)', animation: 'spin 1.5s linear infinite' }} />
             </div>
             
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--sap-text-color)', marginBottom: '6px' }}>
                 Analyzing Invoice Exceptions
               </h3>
-              <p style={{ color: 'var(--text-light)', fontSize: '13px', maxWidth: '380px', margin: '0 auto', lineHeight: '1.6' }}>
+              <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', maxWidth: '380px', margin: '0 auto', lineHeight: '1.5' }}>
                 Scanning ingested records, applying currency thresholds, checking purchase order numbers, and running exception rules...
               </p>
             </div>
 
-            <span className="badge badge-gray" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', padding: '6px 12px' }}>
+            <span className="badge badge-gray" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', padding: '4px 10px' }}>
               Status: Running Diagnostic Scan
             </span>
           </div>
@@ -158,11 +149,11 @@ function ChatWindow() {
       <div className="panel" style={{ maxWidth: '600px', width: '100%', margin: '0 auto' }}>
         <div className="panel-header">
           <div>
-            <h2 style={{ fontSize: '20px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Settings size={20} style={{ color: 'var(--accent-primary)' }} />
+            <h2 style={{ fontSize: '18px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--sap-text-color)' }}>
+              <Settings size={18} style={{ color: 'var(--sap-accent)' }} />
               Audit Control Parameters
             </h2>
-            <p style={{ color: 'var(--text-light)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
               Define validation thresholds and intervals to initialize the anomaly engine.
             </p>
           </div>
@@ -171,15 +162,15 @@ function ChatWindow() {
         <form onSubmit={handleOnboardingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Section 1: Date Criteria */}
           <div style={{ 
-            border: '1px solid var(--border-color)', 
+            border: '1px solid var(--sap-border)', 
             padding: '16px', 
-            backgroundColor: '#fafbfc', 
-            borderRadius: '12px' 
+            backgroundColor: '#f8fafc', 
+            borderRadius: '6px' 
           }}>
             <h3 style={{ 
-              fontSize: '12px', 
+              fontSize: '11px', 
               fontWeight: '700', 
-              color: 'var(--text-light)', 
+              color: 'var(--sap-text-muted)', 
               textTransform: 'uppercase', 
               letterSpacing: '0.05em',
               marginBottom: '12px',
@@ -187,7 +178,7 @@ function ChatWindow() {
               alignItems: 'center',
               gap: '6px'
             }}>
-              <Calendar size={14} /> Date Interval Criteria
+              <Calendar size={12} /> Date Interval Criteria
             </h3>
             <div style={{ display: 'flex', gap: '14px' }}>
               <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
@@ -213,15 +204,15 @@ function ChatWindow() {
 
           {/* Section 2: Currency & Rules */}
           <div style={{ 
-            border: '1px solid var(--border-color)', 
+            border: '1px solid var(--sap-border)', 
             padding: '16px', 
-            backgroundColor: '#fafbfc', 
-            borderRadius: '12px' 
+            backgroundColor: '#f8fafc', 
+            borderRadius: '6px' 
           }}>
             <h3 style={{ 
-              fontSize: '12px', 
+              fontSize: '11px', 
               fontWeight: '700', 
-              color: 'var(--text-light)', 
+              color: 'var(--sap-text-muted)', 
               textTransform: 'uppercase', 
               letterSpacing: '0.05em',
               marginBottom: '12px',
@@ -229,7 +220,7 @@ function ChatWindow() {
               alignItems: 'center',
               gap: '6px'
             }}>
-              <DollarSign size={14} /> Document Control Criteria
+              <DollarSign size={12} /> Document Control Criteria
             </h3>
             <div style={{ display: 'flex', gap: '14px', flexDirection: 'column' }}>
               <div style={{ display: 'flex', gap: '14px' }}>
@@ -271,9 +262,9 @@ function ChatWindow() {
                 alignItems: 'center', 
                 gap: '10px', 
                 backgroundColor: '#ffffff',
-                border: '1px solid var(--border-color)',
-                padding: '12px 14px',
-                borderRadius: '8px',
+                border: '1px solid var(--sap-border)',
+                padding: '10px 14px',
+                borderRadius: '6px',
                 cursor: 'pointer'
               }} onClick={() => setContext({...context, po_numbers_required: !context.po_numbers_required})}>
                 <input 
@@ -281,12 +272,12 @@ function ChatWindow() {
                   id="poRequiredCheckbox" 
                   checked={context.po_numbers_required} 
                   onChange={e => setContext({...context, po_numbers_required: e.target.checked})} 
-                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent-primary)' }}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--sap-accent)' }}
                 />
                 <label 
                   htmlFor="poRequiredCheckbox" 
                   className="form-label" 
-                  style={{ marginBottom: 0, cursor: 'pointer', fontWeight: '600', color: 'var(--text-main)' }}
+                  style={{ marginBottom: 0, cursor: 'pointer', fontWeight: '600', color: 'var(--sap-text-color)' }}
                 >
                   Require Purchase Order (PO Number)
                 </label>
@@ -298,11 +289,11 @@ function ChatWindow() {
             type="submit" 
             className="btn btn-primary" 
             disabled={chatMutation.isPending} 
-            style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '14px' }}
+            style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13px', borderRadius: '6px' }}
           >
             {chatMutation.isPending ? (
               <>
-                <Loader2 className="animate-spin" size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                <Loader2 className="animate-spin" size={14} style={{ animation: 'spin 1s linear infinite' }} />
                 Initializing Engine & Running Anomaly Scan...
               </>
             ) : (
@@ -327,34 +318,34 @@ function ChatWindow() {
             <Settings size={14} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-            <div style={{ borderBottom: '1px dashed var(--border-color)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>DATE RANGE</span>
-              <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>
+            <div style={{ borderBottom: '1px dashed var(--sap-border)', paddingBottom: '8px' }}>
+              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>DATE RANGE</span>
+              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
                 {context.expected_start_date || 'Any'} to {context.expected_end_date || 'Any'}
               </span>
             </div>
-            <div style={{ borderBottom: '1px dashed var(--border-color)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>ISO CURRENCY</span>
-              <span style={{ fontWeight: '600', color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ borderBottom: '1px dashed var(--sap-border)', paddingBottom: '8px' }}>
+              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>ISO CURRENCY</span>
+              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)', fontFamily: 'var(--font-mono)' }}>
                 {context.expected_currency}
               </span>
             </div>
-            <div style={{ borderBottom: '1px dashed var(--border-color)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>PAYMENT STATUS</span>
-              <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>
+            <div style={{ borderBottom: '1px dashed var(--sap-border)', paddingBottom: '8px' }}>
+              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>PAYMENT STATUS</span>
+              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
                 {context.expected_payment_status}
               </span>
             </div>
             <div>
-              <span style={{ color: 'var(--text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>PO REQUIRED</span>
-              <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>
+              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>PO REQUIRED</span>
+              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
                 {context.po_numbers_required ? 'Yes' : 'No'}
               </span>
             </div>
             
             <button 
               className="btn" 
-              style={{ width: '100%', padding: '6px', fontSize: '11px', marginTop: '6px' }} 
+              style={{ width: '100%', padding: '6px', fontSize: '11px', marginTop: '6px', borderRadius: '4px' }} 
               onClick={() => setOnboardingComplete(false)}
             >
               Adjust Parameters
@@ -364,83 +355,41 @@ function ChatWindow() {
 
         {/* Sidebar Card 2: Anomaly Health Meter */}
         <div className="sidebar-card" style={{ 
-          backgroundColor: latestAnomalyCount > 0 ? 'var(--status-red-bg)' : (latestAnomalyCount === 0 ? 'var(--status-green-bg)' : 'var(--bg-card)'),
-          borderColor: latestAnomalyCount > 0 ? 'var(--status-red-border)' : (latestAnomalyCount === 0 ? 'var(--status-green-border)' : 'var(--border-color)')
+          backgroundColor: latestAnomalyCount > 0 ? 'var(--sap-error-bg)' : (latestAnomalyCount === 0 ? 'var(--sap-success-bg)' : 'var(--sap-card-bg)'),
+          borderColor: latestAnomalyCount > 0 ? 'var(--sap-error-border)' : (latestAnomalyCount === 0 ? 'var(--sap-success-border)' : 'var(--sap-border)')
         }}>
           <div className="sidebar-card-title">
-            <span style={{ color: latestAnomalyCount > 0 ? 'var(--status-red)' : (latestAnomalyCount === 0 ? 'var(--status-green)' : 'var(--text-light)') }}>
+            <span style={{ color: latestAnomalyCount > 0 ? 'var(--sap-error-text)' : (latestAnomalyCount === 0 ? 'var(--sap-success-text)' : 'var(--sap-text-light)') }}>
               Scan Diagnostics
             </span>
-            <ShieldAlert size={14} style={{ color: latestAnomalyCount > 0 ? 'var(--status-red)' : (latestAnomalyCount === 0 ? 'var(--status-green)' : 'var(--text-light)') }} />
+            <ShieldAlert size={14} style={{ color: latestAnomalyCount > 0 ? 'var(--sap-error-text)' : (latestAnomalyCount === 0 ? 'var(--sap-success-text)' : 'var(--sap-text-light)') }} />
           </div>
           <div>
             {latestAnomalyCount !== null ? (
               latestAnomalyCount > 0 ? (
                 <div>
-                  <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--status-red)', fontFamily: 'var(--font-mono)' }}>
+                  <span style={{ fontSize: '22px', fontWeight: '800', color: 'var(--sap-error-text)', fontFamily: 'var(--font-mono)' }}>
                     {latestAnomalyCount}
                   </span>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)', marginLeft: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--sap-text-color)', marginLeft: '6px' }}>
                     Anomalies Active
                   </span>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
+                  <p style={{ fontSize: '11px', color: 'var(--sap-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
                     Critical exceptions found matching control rule limits. Export log below to review details.
                   </p>
                 </div>
               ) : (
                 <div>
-                  <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--status-green)' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--sap-success-text)' }}>
                     ✓ Clean Audit Log
                   </span>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
+                  <p style={{ fontSize: '11px', color: 'var(--sap-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
                     All invoices match context parameters perfectly. No exceptions flagged.
                   </p>
                 </div>
               )
             ) : (
-              <span style={{ color: 'var(--text-light)', fontSize: '12px' }}>Awaiting initial diagnostic scan...</span>
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar Card 3: Standard ERP Schema References */}
-        <div className="sidebar-card" style={{ flex: 1, minHeight: '180px', display: 'flex', flexDirection: 'column' }}>
-          <div className="sidebar-card-title">
-            <span>Standard Schema</span>
-            <Layers size={14} />
-          </div>
-          <div style={{ 
-            flex: 1, 
-            overflowY: 'auto', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: '6px',
-            maxHeight: '260px',
-            paddingRight: '4px' 
-          }}>
-            {standardFields.length > 0 ? (
-              standardFields.map((field, i) => (
-                <div 
-                  key={i} 
-                  style={{ 
-                    fontFamily: 'var(--font-mono)', 
-                    fontSize: '11px', 
-                    backgroundColor: '#f1f5f9', 
-                    padding: '4px 8px', 
-                    borderRadius: '6px',
-                    color: 'var(--text-muted)',
-                    border: '1px solid var(--border-color)',
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden'
-                  }}
-                  title={field}
-                >
-                  {field}
-                </div>
-              ))
-            ) : (
-              <span style={{ color: 'var(--text-light)', fontSize: '12px' }}>No schema fields loaded</span>
+              <span style={{ color: 'var(--sap-text-light)', fontSize: '12px' }}>Awaiting initial diagnostic scan...</span>
             )}
           </div>
         </div>
@@ -448,11 +397,10 @@ function ChatWindow() {
 
       {/* Right Main Chat Panel */}
       <div className="chat-container">
-        {/* Chat Control Bar Header */}
         <div style={{ 
-          padding: '14px 20px', 
-          borderBottom: '1px solid var(--border-color)', 
-          backgroundColor: 'var(--bg-card)',
+          padding: '12px 20px', 
+          borderBottom: '1px solid var(--sap-border)', 
+          backgroundColor: 'var(--sap-card-bg)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
@@ -462,7 +410,7 @@ function ChatWindow() {
               width: '8px', 
               height: '8px', 
               borderRadius: '50%', 
-              backgroundColor: 'var(--accent-primary)',
+              backgroundColor: 'var(--sap-accent)',
               position: 'relative'
             }}>
               <div style={{
@@ -472,12 +420,12 @@ function ChatWindow() {
                 right: 0,
                 bottom: 0,
                 borderRadius: '50%',
-                backgroundColor: 'var(--accent-primary)',
+                backgroundColor: 'var(--sap-accent)',
                 opacity: 0.4,
                 animation: 'pulse-ring 2s infinite'
               }}></div>
             </div>
-            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-main)' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--sap-text-color)' }}>
               Diagnostic Inquiry Channel
             </h3>
           </div>
@@ -501,8 +449,8 @@ function ChatWindow() {
               <div style={{ 
                 whiteSpace: 'pre-wrap', 
                 fontSize: '13px', 
-                lineHeight: '1.6',
-                color: msg.role === 'user' ? '#ffffff' : 'var(--text-main)'
+                lineHeight: '1.5',
+                color: 'var(--sap-text-color)'
               }}>
                 {msg.content}
               </div>
@@ -511,7 +459,7 @@ function ChatWindow() {
                 <div style={{ marginTop: '12px' }}>
                   <button 
                     className="btn" 
-                    style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f8fafc' }} 
+                    style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f8fafc', border: '1px solid var(--sap-border)', borderRadius: '4px' }} 
                     onClick={() => downloadCSV(msg.raw_csv)}
                   >
                     <Download size={14} /> Export Exception Log (CSV)
@@ -546,12 +494,12 @@ function ChatWindow() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={chatMutation.isPending}
-            style={{ height: '42px', fontSize: '13px', borderRadius: '10px' }}
+            style={{ height: '38px', fontSize: '13px', borderRadius: '6px' }}
           />
           <button 
             type="submit" 
             className="btn btn-primary" 
-            style={{ padding: '0 20px', height: '42px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px' }} 
+            style={{ padding: '0 20px', height: '38px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }} 
             disabled={chatMutation.isPending || !input.trim()}
           >
             <Send size={14} /> Run Query

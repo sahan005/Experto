@@ -1,9 +1,9 @@
 import sqlite3
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import bcrypt
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 DB_PATH = os.environ.get("DB_PATH", "invoices.db")
 

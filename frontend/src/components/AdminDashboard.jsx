@@ -6,7 +6,7 @@ import { Settings, Shield, Activity, Users, AlertTriangle, CheckCircle2, Databas
 const API_URL = 'http://localhost:8081';
 
 function AdminDashboard() {
-  const { token } = useContext(AuthContext);
+  const { token, logout } = useContext(AuthContext);
   const [dashboardData, setDashboardData] = useState(null);
   const [vendors, setVendors] = useState([]);
   const [rules, setRules] = useState([]);
@@ -22,6 +22,10 @@ function AdminDashboard() {
           'Authorization': `Bearer ${token}`
         }
       });
+      if (response.status === 401) {
+        logout();
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         setDashboardData(data);
@@ -36,11 +40,19 @@ function AdminDashboard() {
       const vRes = await fetch(`${API_URL}/api/admin/vendors`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (vRes.status === 401) {
+        logout();
+        return;
+      }
       if (vRes.ok) setVendors(await vRes.json());
 
       const rRes = await fetch(`${API_URL}/api/admin/rules`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (rRes.status === 401) {
+        logout();
+        return;
+      }
       if (rRes.ok) setRules(await rRes.json());
     } catch (err) {
       console.error('Failed to fetch vendors/rules', err);
@@ -52,6 +64,10 @@ function AdminDashboard() {
       const uRes = await fetch(`${API_URL}/api/admin/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (uRes.status === 401) {
+        logout();
+        return;
+      }
       if (uRes.ok) setUsers(await uRes.json());
     } catch (err) {
       console.error('Failed to fetch users', err);
@@ -135,8 +151,8 @@ function AdminDashboard() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '10px' }}>
-        <Loader2 className="animate-spin" size={24} style={{ color: 'var(--accent-primary)', animation: 'spin 1.5s linear infinite' }} />
-        <span style={{ fontWeight: '600', color: 'var(--text-muted)' }}>Loading system dashboard...</span>
+        <Loader2 className="animate-spin" size={24} style={{ color: 'var(--sap-accent)', animation: 'spin 1.5s linear infinite' }} />
+        <span style={{ fontWeight: '600', color: 'var(--sap-text-muted)' }}>Loading system dashboard...</span>
       </div>
     );
   }
@@ -163,20 +179,21 @@ function AdminDashboard() {
       {/* Dashboard Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ 
-          backgroundColor: '#eef2ff', 
+          backgroundColor: 'var(--sap-accent-light)', 
           padding: '8px', 
-          borderRadius: '10px',
+          borderRadius: '6px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          border: '1px solid rgba(10, 110, 209, 0.15)'
         }}>
-          <Activity size={22} style={{ color: 'var(--accent-primary)' }} />
+          <Activity size={20} style={{ color: 'var(--sap-accent)' }} />
         </div>
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--sap-text-color)', letterSpacing: '-0.01em' }}>
             Executive Admin Dashboard
           </h1>
-          <p style={{ color: 'var(--text-light)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
+          <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
             System volume stats, vendor access controls, and category compliance rules.
           </p>
         </div>
@@ -184,94 +201,153 @@ function AdminDashboard() {
 
       {/* KPI Stats Panel Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
-        <div className="panel" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-light)' }}>Total Uploaded Invoices</span>
-            <div style={{ color: 'var(--accent-primary)', backgroundColor: '#f0f3ff', padding: '6px', borderRadius: '8px' }}>
-              <Database size={16} />
+        <div className="panel" style={{ padding: '16px', borderRadius: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Total Invoices</span>
+            <div style={{ color: 'var(--sap-accent)', backgroundColor: 'var(--sap-accent-light)', padding: '6px', borderRadius: '4px', border: '1px solid rgba(10, 110, 209, 0.1)' }}>
+              <Database size={14} />
             </div>
           </div>
-          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>
+          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--sap-text-color)', fontFamily: 'var(--font-mono)' }}>
             {dashboardData?.total_invoices || 0}
           </div>
         </div>
 
-        <div className="panel" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-light)' }}>Detected Anomalies</span>
-            <div style={{ color: 'var(--status-red)', backgroundColor: 'var(--status-red-bg)', padding: '6px', borderRadius: '8px' }}>
-              <ShieldAlert size={16} />
+        <div className="panel" style={{ padding: '16px', borderRadius: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Detected Anomalies</span>
+            <div style={{ color: 'var(--sap-error-text)', backgroundColor: 'var(--sap-error-bg)', padding: '6px', borderRadius: '4px', border: '1px solid var(--sap-error-border)' }}>
+              <ShieldAlert size={14} />
             </div>
           </div>
-          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--status-red)', fontFamily: 'var(--font-mono)' }}>
+          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--sap-error-text)', fontFamily: 'var(--font-mono)' }}>
             {dashboardData?.total_anomalies || 0}
           </div>
         </div>
 
-        <div className="panel" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-light)' }}>Active Vendor Profiles</span>
-            <div style={{ color: 'var(--status-green)', backgroundColor: 'var(--status-green-bg)', padding: '6px', borderRadius: '8px' }}>
-              <Shield size={16} />
+        <div className="panel" style={{ padding: '16px', borderRadius: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Active Vendors</span>
+            <div style={{ color: 'var(--sap-success-text)', backgroundColor: 'var(--sap-success-bg)', padding: '6px', borderRadius: '4px', border: '1px solid var(--sap-success-border)' }}>
+              <Shield size={14} />
             </div>
           </div>
-          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--status-green)', fontFamily: 'var(--font-mono)' }}>
-            {vendors.filter(v => v.status === 'active').length} <span style={{ fontSize: '14px', color: 'var(--text-light)', fontWeight: '500' }}>/ {vendors.length}</span>
+          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--sap-success-text)', fontFamily: 'var(--font-mono)' }}>
+            {vendors.filter(v => v.status === 'active').length} <span style={{ fontSize: '14px', color: 'var(--sap-text-muted)', fontWeight: '500' }}>/ {vendors.length}</span>
           </div>
         </div>
       </div>
 
-      {/* Chart Panel */}
-      <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ marginBottom: '20px' }}>
-          <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)' }}>Daily Processing Volume</h3>
-          <p style={{ color: 'var(--text-light)', fontSize: '12px', marginTop: '2px' }}>
-            Aggregated transaction amounts and volume records tracked over time.
-          </p>
+      {/* Charts Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
+        {/* Daily Processed Spend Chart */}
+        <div className="panel" style={{ height: '360px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)' }}>Daily Processed Spend</h3>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
+              Total financial amount of invoices processed per day (grouped by upload date).
+            </p>
+          </div>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 15 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--sap-border)" vertical={false} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="var(--sap-text-light)" 
+                  fontSize={11} 
+                  fontFamily="var(--font-mono)"
+                  tickLine={false} 
+                  axisLine={false} 
+                />
+                <YAxis 
+                  stroke="var(--sap-text-light)" 
+                  fontSize={11} 
+                  fontFamily="var(--font-mono)"
+                  tickLine={false} 
+                  axisLine={false} 
+                  width={65}
+                  tickFormatter={formatYAxis} 
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'var(--sap-card-bg)', 
+                    border: '1px solid var(--sap-border)', 
+                    borderRadius: '6px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px'
+                  }}
+                  itemStyle={{ color: 'var(--sap-text-color)', fontWeight: '600' }}
+                  labelStyle={{ color: 'var(--sap-text-muted)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}
+                  formatter={(value) => [`$${value.toLocaleString()}`, 'Amount']}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="amount" 
+                  stroke="var(--sap-accent)" 
+                  strokeWidth={2.5} 
+                  dot={{ r: 3.5, strokeWidth: 1, fill: 'var(--sap-accent)' }} 
+                  activeDot={{ r: 5, strokeWidth: 0 }} 
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 15 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-              <XAxis 
-                dataKey="date" 
-                stroke="var(--text-light)" 
-                fontSize={11} 
-                fontFamily="var(--font-mono)"
-                tickLine={false} 
-                axisLine={false} 
-              />
-              <YAxis 
-                stroke="var(--text-light)" 
-                fontSize={11} 
-                fontFamily="var(--font-mono)"
-                tickLine={false} 
-                axisLine={false} 
-                width={65}
-                tickFormatter={formatYAxis} 
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'var(--bg-card)', 
-                  border: '1px solid var(--border-color)', 
-                  borderRadius: '10px',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: '13px'
-                }}
-                itemStyle={{ color: 'var(--text-main)', fontWeight: '600' }}
-                labelStyle={{ color: 'var(--text-light)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="amount" 
-                stroke="var(--accent-primary)" 
-                strokeWidth={3} 
-                dot={{ r: 4, strokeWidth: 1, fill: 'var(--accent-primary)' }} 
-                activeDot={{ r: 6, strokeWidth: 0 }} 
-              />
-            </LineChart>
-          </ResponsiveContainer>
+
+        {/* Daily Invoice Volume Chart */}
+        <div className="panel" style={{ height: '360px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)' }}>Daily Invoice Volume</h3>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
+              Total number of unique invoices processed per day (grouped by upload date).
+            </p>
+          </div>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 15 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--sap-border)" vertical={false} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="var(--sap-text-light)" 
+                  fontSize={11} 
+                  fontFamily="var(--font-mono)"
+                  tickLine={false} 
+                  axisLine={false} 
+                />
+                <YAxis 
+                  stroke="var(--sap-text-light)" 
+                  fontSize={11} 
+                  fontFamily="var(--font-mono)"
+                  tickLine={false} 
+                  axisLine={false} 
+                  width={30}
+                  allowDecimals={false}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'var(--sap-card-bg)', 
+                    border: '1px solid var(--sap-border)', 
+                    borderRadius: '6px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px'
+                  }}
+                  itemStyle={{ color: 'var(--sap-text-color)', fontWeight: '600' }}
+                  labelStyle={{ color: 'var(--sap-text-muted)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}
+                  formatter={(value) => [value, 'Invoices']}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="count" 
+                  stroke="var(--sap-success-text)" 
+                  strokeWidth={2.5} 
+                  dot={{ r: 3.5, strokeWidth: 1, fill: 'var(--sap-success-text)' }} 
+                  activeDot={{ r: 5, strokeWidth: 0 }} 
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
@@ -283,13 +359,13 @@ function AdminDashboard() {
         alignItems: 'start'
       }}>
         {/* Column 1: Vendor Access Control */}
-        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column' }}>
+        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
           <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Shield size={18} style={{ color: 'var(--text-light)' }} />
+            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Shield size={16} style={{ color: 'var(--sap-text-light)' }} />
               Vendor Access Control
             </h3>
-            <p style={{ color: 'var(--text-light)', fontSize: '12px', marginTop: '2px' }}>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
               Block or authorize vendor invoice processing.
             </p>
           </div>
@@ -306,7 +382,7 @@ function AdminDashboard() {
               <tbody>
                 {vendors.map(v => (
                   <tr key={v.vendor_name}>
-                    <td style={{ fontWeight: '600', color: 'var(--text-main)' }}>{v.vendor_name}</td>
+                    <td style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>{v.vendor_name}</td>
                     <td>
                       {v.status === 'active' ? (
                         <span className="badge badge-green">Active</span>
@@ -318,7 +394,7 @@ function AdminDashboard() {
                       <button 
                         onClick={() => toggleVendorStatus(v)}
                         className={`btn ${v.status === 'active' ? 'btn-danger' : 'btn-primary'}`}
-                        style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px' }}
+                        style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '4px' }}
                       >
                         {v.status === 'active' ? 'Block' : 'Unblock'}
                       </button>
@@ -331,13 +407,13 @@ function AdminDashboard() {
         </div>
 
         {/* Column 2: Category Compliance Rules */}
-        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column' }}>
+        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
           <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Settings size={18} style={{ color: 'var(--text-light)' }} />
+            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Settings size={16} style={{ color: 'var(--sap-text-light)' }} />
               Category Price Limits
             </h3>
-            <p style={{ color: 'var(--text-light)', fontSize: '12px', marginTop: '2px' }}>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
               Set price caps and tax rate compliance rules.
             </p>
           </div>
@@ -355,7 +431,7 @@ function AdminDashboard() {
               <tbody>
                 {rules.map(r => (
                   <tr key={r.category_name}>
-                    <td style={{ fontWeight: '600', color: 'var(--text-main)' }}>{r.category_name}</td>
+                    <td style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>{r.category_name}</td>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>${r.min_price || '0'}</td>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>${r.max_price || 'Any'}</td>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>{r.expected_tax_rate ? `${r.expected_tax_rate}%` : 'Any'}</td>
@@ -366,14 +442,14 @@ function AdminDashboard() {
           </div>
 
           {/* Quick Add Rule Form */}
-          <form onSubmit={addRule} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <form onSubmit={addRule} style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <input 
               type="text" 
               placeholder="Category Name" 
               value={newRule.category_name} 
               onChange={e => setNewRule({...newRule, category_name: e.target.value})}
               className="form-input"
-              style={{ flex: 1, minWidth: '100px', padding: '6px 10px', fontSize: '12px', height: '32px' }}
+              style={{ flex: 1, minWidth: '90px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
               required
             />
             <input 
@@ -382,7 +458,7 @@ function AdminDashboard() {
               value={newRule.min_price} 
               onChange={e => setNewRule({...newRule, min_price: e.target.value})}
               className="form-input"
-              style={{ width: '60px', padding: '6px 10px', fontSize: '12px', height: '32px' }}
+              style={{ width: '55px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
             />
             <input 
               type="number" 
@@ -390,7 +466,7 @@ function AdminDashboard() {
               value={newRule.max_price} 
               onChange={e => setNewRule({...newRule, max_price: e.target.value})}
               className="form-input"
-              style={{ width: '60px', padding: '6px 10px', fontSize: '12px', height: '32px' }}
+              style={{ width: '55px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
             />
             <input 
               type="number" 
@@ -398,22 +474,22 @@ function AdminDashboard() {
               value={newRule.expected_tax_rate} 
               onChange={e => setNewRule({...newRule, expected_tax_rate: e.target.value})}
               className="form-input"
-              style={{ width: '55px', padding: '6px 10px', fontSize: '12px', height: '32px' }}
+              style={{ width: '50px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
             />
-            <button type="submit" className="btn btn-primary" style={{ padding: '6px 10px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button type="submit" className="btn btn-primary" style={{ padding: '0 8px', height: '30px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Plus size={14} />
             </button>
           </form>
         </div>
 
         {/* Column 3: User Management */}
-        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column' }}>
+        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
           <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={18} style={{ color: 'var(--text-light)' }} />
+            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Users size={16} style={{ color: 'var(--sap-text-light)' }} />
               User Account Control
             </h3>
-            <p style={{ color: 'var(--text-light)', fontSize: '12px', marginTop: '2px' }}>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
               Create and monitor operator login permissions.
             </p>
           </div>
@@ -429,7 +505,7 @@ function AdminDashboard() {
               <tbody>
                 {users.map(u => (
                   <tr key={u.id}>
-                    <td style={{ fontWeight: '600', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                    <td style={{ fontWeight: '600', color: 'var(--sap-text-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
                       {u.email}
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -444,14 +520,14 @@ function AdminDashboard() {
           </div>
 
           {/* Quick Add User Form */}
-          <form onSubmit={handleAddUser} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <form onSubmit={handleAddUser} style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <input 
               type="email" 
               placeholder="new@experto.ai" 
               value={newUser.email} 
               onChange={e => setNewUser({...newUser, email: e.target.value})}
               className="form-input"
-              style={{ flex: 1, minWidth: '120px', padding: '6px 10px', fontSize: '12px', height: '32px' }}
+              style={{ flex: 1, minWidth: '100px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
               required
             />
             <input 
@@ -460,10 +536,10 @@ function AdminDashboard() {
               value={newUser.password} 
               onChange={e => setNewUser({...newUser, password: e.target.value})}
               className="form-input"
-              style={{ width: '90px', padding: '6px 10px', fontSize: '12px', height: '32px' }}
+              style={{ width: '80px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
               required
             />
-            <button type="submit" className="btn btn-primary" style={{ padding: '6px 10px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '12px' }}>
+            <button type="submit" className="btn btn-primary" style={{ padding: '0 8px', height: '30px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '12px' }}>
               <UserPlus size={14} /> Add
             </button>
           </form>

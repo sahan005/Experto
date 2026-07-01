@@ -22,84 +22,86 @@ function App() {
 
   if (!user) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--sap-bg)', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
         <LoginWindow />
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)' }}>
-      {/* Modern SaaS Navigation Header */}
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--sap-bg)' }}>
+      {/* SAP Fiori Shell Bar */}
       <header style={{ 
-        backgroundColor: 'var(--bg-card)', 
-        borderBottom: '1px solid var(--border-color)',
-        padding: '14px 24px', 
+        backgroundColor: 'var(--sap-shell-bg)', 
+        color: 'var(--sap-shell-text)',
+        padding: '10px 24px', 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.02)'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        zIndex: 1000
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Minimalist Logo Icon */}
+            {/* SAP Blue Logo Icon */}
             <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--accent-primary)',
+              width: '26px',
+              height: '26px',
+              borderRadius: '4px',
+              backgroundColor: 'var(--sap-accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#ffffff',
               fontWeight: 'bold',
-              fontSize: '18px'
+              fontSize: '14px'
             }}>
               E
             </div>
             <span style={{ 
               fontWeight: '700', 
-              fontSize: '18px', 
-              letterSpacing: '-0.02em', 
-              color: 'var(--text-main)' 
+              fontSize: '16px', 
+              color: '#ffffff',
+              letterSpacing: '-0.01em'
             }}>
-              Experto<span style={{ color: 'var(--accent-primary)', fontWeight: '500' }}>.ai</span>
+              Experto<span style={{ color: '#5bb2ff', fontWeight: '500' }}>.ai</span>
             </span>
           </div>
-          <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-color)' }}></div>
+          <div style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255,255,255,0.2)' }}></div>
           <span style={{ 
-            fontSize: '12px',
+            fontSize: '11px',
             fontFamily: 'var(--font-mono)', 
-            color: 'var(--text-light)',
-            backgroundColor: '#f1f5f9',
-            padding: '4px 8px',
-            borderRadius: '6px',
+            color: 'rgba(255,255,255,0.7)',
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            padding: '2px 6px',
+            borderRadius: '4px',
             fontWeight: '500'
           }}>
-            v1.0.4
+            T-CODE: AUDIT_WORKSPACE
           </span>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', fontSize: '13px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '13px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: 'var(--text-light)' }}>Workspace:</span>
+            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Workspace:</span>
             <select 
               value={currentView}
               onChange={(e) => setCurrentView(e.target.value)}
               style={{
                 fontWeight: '600', 
-                color: 'var(--text-main)',
-                backgroundColor: 'var(--bg-page)',
+                color: '#ffffff',
+                backgroundColor: 'rgba(255,255,255,0.1)',
                 padding: '4px 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
+                borderRadius: '4px',
+                border: '1px solid rgba(255,255,255,0.3)',
                 cursor: 'pointer',
-                outline: 'none'
+                outline: 'none',
+                fontSize: '12px'
               }}
             >
-              {user?.role === 'admin' && <option value="dashboard">Admin Dashboard</option>}
-              <option value="upload">Document Ingestion</option>
-              <option value="chat">Audit Exception Control</option>
+              {user?.role === 'admin' && <option value="dashboard" style={{ color: 'var(--sap-text-color)' }}>Admin Dashboard</option>}
+              <option value="upload" style={{ color: 'var(--sap-text-color)' }}>Document Ingestion</option>
+              <option value="chat" style={{ color: 'var(--sap-text-color)' }}>Audit Exception Control</option>
             </select>
           </div>
           
@@ -108,7 +110,7 @@ function App() {
               width: '8px', 
               height: '8px', 
               borderRadius: '50%', 
-              backgroundColor: 'var(--status-green)',
+              backgroundColor: 'var(--sap-success-text)',
               position: 'relative'
             }}>
               <div style={{
@@ -118,26 +120,29 @@ function App() {
                 right: 0,
                 bottom: 0,
                 borderRadius: '50%',
-                backgroundColor: 'var(--status-green)',
+                backgroundColor: 'var(--sap-success-text)',
                 opacity: 0.4,
                 animation: 'pulse-ring 2s infinite'
               }}></div>
             </div>
-            <span style={{ fontWeight: '500', color: 'var(--text-muted)' }}>Audit Engine Online</span>
+            <span style={{ fontWeight: '500', color: 'rgba(255,255,255,0.8)', fontSize: '12px' }}>Audit System Online</span>
           </div>
 
           <button 
             onClick={logout}
             style={{
-              padding: '6px 12px',
+              padding: '4px 12px',
               backgroundColor: 'transparent',
-              color: 'var(--text-light)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '6px',
+              color: '#ffffff',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '4px',
               fontSize: '12px',
               fontWeight: '500',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              transition: 'background-color 0.15s'
             }}
+            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+            onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
           >
             Sign out
           </button>

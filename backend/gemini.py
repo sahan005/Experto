@@ -1,9 +1,9 @@
 import os
 import httpx
 import json
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 

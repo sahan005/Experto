@@ -252,11 +252,11 @@ function UploadWindow({ onConfirmed }) {
     <div className="panel" style={{ maxWidth: '960px', width: '100%', margin: '0 auto' }}>
       <div className="panel-header">
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Database size={20} style={{ color: 'var(--accent-primary)' }} />
+          <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Database size={18} style={{ color: 'var(--sap-accent)' }} />
             Document Ingestion Portal
           </h2>
-          <p style={{ color: 'var(--text-light)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
+          <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
             Upload invoice files to extract, align, and ingest transactions.
           </p>
         </div>
@@ -285,12 +285,12 @@ function UploadWindow({ onConfirmed }) {
         <div className="progress-container">
           <div className="progress-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Loader2 className="animate-spin" size={20} style={{ color: 'var(--accent-primary)', animation: 'spin 1s linear infinite' }} />
-              <span style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-main)', letterSpacing: '-0.01em' }}>
+              <Loader2 className="animate-spin" size={20} style={{ color: 'var(--sap-accent)', animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--sap-text-color)', letterSpacing: '-0.01em' }}>
                 Analyzing document...
               </span>
             </div>
-            <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: 'var(--accent-primary)' }}>
+            <span style={{ fontSize: '13px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: 'var(--sap-accent)' }}>
               {progressPercent}%
             </span>
           </div>
@@ -331,23 +331,23 @@ function UploadWindow({ onConfirmed }) {
             onChange={handleFileChange}
           />
           <div style={{ 
-            backgroundColor: '#f1f3fe', 
-            width: '60px', 
-            height: '60px', 
+            backgroundColor: 'var(--sap-accent-light)', 
+            width: '56px', 
+            height: '56px', 
             borderRadius: '50%', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
             marginBottom: '16px',
-            boxShadow: '0 4px 10px rgba(79, 70, 229, 0.08)'
+            border: '1px solid rgba(10, 110, 209, 0.15)'
           }}>
-            <UploadCloud size={28} className="drop-zone-icon" style={{ margin: 0 }} />
+            <UploadCloud size={24} className="drop-zone-icon" style={{ margin: 0 }} />
           </div>
-          <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '6px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', marginBottom: '4px' }}>
             {activeTab === 'csv' ? 'Select CSV Transaction Sheet' : 
              activeTab === 'pdf' ? 'Select PDF Invoice' : 'Select Invoice Image'}
           </h3>
-          <p style={{ color: 'var(--text-light)', fontSize: '13px', maxWidth: '380px', margin: '0 auto', lineHeight: '1.5' }}>
+          <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', maxWidth: '380px', margin: '0 auto', lineHeight: '1.5' }}>
             Click to browse your computer or drag and drop your file here. Maximum file size 20MB.
           </p>
         </div>
@@ -358,46 +358,47 @@ function UploadWindow({ onConfirmed }) {
             justifyContent: 'space-between', 
             alignItems: 'center', 
             marginBottom: '16px', 
-            backgroundColor: 'var(--status-green-bg)', 
-            padding: '14px 20px', 
-            border: '1px solid var(--status-green-border)', 
-            borderRadius: '12px' 
+            backgroundColor: 'var(--sap-success-bg)', 
+            padding: '12px 18px', 
+            border: '1px solid var(--sap-success-border)', 
+            borderRadius: '8px' 
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
-                backgroundColor: 'var(--status-green)',
-                width: '24px',
-                height: '24px',
+                backgroundColor: 'var(--sap-success-text)',
+                width: '22px',
+                height: '22px',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'white'
+                color: '#ffffff',
+                fontSize: '11px'
               }}>
                 ✓
               </div>
               <div>
-                <span style={{ fontWeight: '700', color: 'var(--text-main)', display: 'block', fontSize: '14px' }}>
+                <span style={{ fontWeight: '700', color: 'var(--sap-text-color)', display: 'block', fontSize: '13px' }}>
                   AI Extraction Success
                 </span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                <span style={{ fontSize: '12px', color: 'var(--sap-text-muted)' }}>
                   File aligned: {preview.filename}
                 </span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn" onClick={resetUpload}>
+              <button className="btn" onClick={resetUpload} style={{ padding: '6px 12px', borderRadius: '6px' }}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleConfirmDocument} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                Post & Ingest Invoices <ArrowRight size={14} />
+              <button className="btn btn-primary" onClick={handleConfirmDocument} style={{ padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Post & Ingest Invoices <ArrowRight size={12} />
               </button>
             </div>
           </div>
           
           <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-main)' }}>Extracted Structured Schema Preview</h3>
-            <p style={{ color: 'var(--text-light)', fontSize: '12px', marginTop: '2px' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--sap-text-color)' }}>Extracted Structured Schema Preview</h3>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
               The AI extraction engine mapped raw data fields into the unified ERP schema shown below. Verify details before posting.
             </p>
           </div>
