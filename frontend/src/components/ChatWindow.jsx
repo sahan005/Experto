@@ -40,7 +40,8 @@ function ChatWindow() {
           role: 'assistant',
           content: data.response,
           anomaly_count: data.anomaly_count,
-          raw_csv: data.raw_csv
+          raw_csv: data.raw_csv,
+          highlighted_csv: data.highlighted_csv
         }]);
         setOnboardingComplete(true);
       } else {
@@ -48,7 +49,8 @@ function ChatWindow() {
           role: 'assistant',
           content: data.response,
           anomaly_count: data.anomaly_count,
-          raw_csv: data.raw_csv
+          raw_csv: data.raw_csv,
+          highlighted_csv: data.highlighted_csv
         }]);
       }
     },
@@ -98,6 +100,16 @@ function ChatWindow() {
     const a = document.createElement('a');
     a.href = url;
     a.download = 'anomaly_export.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const downloadHighlightedCSV = (csvContent) => {
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'highlighted_original.csv';
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -455,15 +467,37 @@ function ChatWindow() {
                 {msg.content}
               </div>
               
-              {msg.role === 'assistant' && msg.raw_csv && (
-                <div style={{ marginTop: '12px' }}>
-                  <button 
-                    className="btn" 
-                    style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f8fafc', border: '1px solid var(--sap-border)', borderRadius: '4px' }} 
-                    onClick={() => downloadCSV(msg.raw_csv)}
-                  >
-                    <Download size={14} /> Export Exception Log (CSV)
-                  </button>
+              {msg.role === 'assistant' && (msg.raw_csv || msg.highlighted_csv) && (
+                <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {msg.raw_csv && (
+                    <button 
+                      className="btn" 
+                      style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f8fafc', border: '1px solid var(--sap-border)', borderRadius: '4px' }} 
+                      onClick={() => downloadCSV(msg.raw_csv)}
+                    >
+                      <Download size={14} /> Export Exception Log (CSV)
+                    </button>
+                  )}
+                  {msg.highlighted_csv && (
+                    <button 
+                      className="btn btn-primary" 
+                      style={{ 
+                        padding: '6px 12px', 
+                        fontSize: '12px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px', 
+                        backgroundColor: 'var(--sap-accent)', 
+                        color: '#ffffff',
+                        border: '1px solid var(--sap-accent)', 
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }} 
+                      onClick={() => downloadHighlightedCSV(msg.highlighted_csv)}
+                    >
+                      <Download size={14} /> Download Highlighted Original (CSV)
+                    </button>
+                  )}
                 </div>
               )}
             </div>

@@ -60,6 +60,7 @@ async def test_pipeline():
         print("Anomaly Count:", response.anomaly_count)
         print("Narration:", response.response)
         print("CSV Output:\n", response.raw_csv)
+        print("Highlighted CSV Output:\n", response.highlighted_csv)
     except Exception as e:
         print("\nERROR in scan:")
         print(e)

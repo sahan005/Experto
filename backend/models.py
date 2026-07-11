@@ -57,6 +57,7 @@ class ChatMessageResponse(BaseModel):
     response: str
     anomaly_count: int
     raw_csv: Optional[str] = None
+    highlighted_csv: Optional[str] = None
 
 class QueryFilters(BaseModel):
     categories: List[str]

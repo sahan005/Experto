@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Settings, Shield, Activity, Users, AlertTriangle, CheckCircle2, Database, ShieldAlert, UserPlus, Plus, Loader2 } from 'lucide-react';
+import { Settings, Shield, Activity, Users, AlertTriangle, CheckCircle2, Database, ShieldAlert, UserPlus, Plus, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 
 const API_URL = 'http://localhost:8081';
 
 function AdminDashboard() {
-  const { token, logout } = useContext(AuthContext);
+  const { token, logout, user } = useContext(AuthContext);
   const [dashboardData, setDashboardData] = useState(null);
   const [vendors, setVendors] = useState([]);
   const [rules, setRules] = useState([]);
@@ -17,7 +17,7 @@ function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/admin/dashboard`, {
+      const response = await fetch(`${API_URL}/api/admin/dashboard?t=${Date.now()}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -37,7 +37,7 @@ function AdminDashboard() {
 
   const fetchVendorsAndRules = async () => {
     try {
-      const vRes = await fetch(`${API_URL}/api/admin/vendors`, {
+      const vRes = await fetch(`${API_URL}/api/admin/vendors?t=${Date.now()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (vRes.status === 401) {
@@ -46,7 +46,7 @@ function AdminDashboard() {
       }
       if (vRes.ok) setVendors(await vRes.json());
 
-      const rRes = await fetch(`${API_URL}/api/admin/rules`, {
+      const rRes = await fetch(`${API_URL}/api/admin/rules?t=${Date.now()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (rRes.status === 401) {
@@ -61,7 +61,7 @@ function AdminDashboard() {
 
   const fetchUsers = async () => {
     try {
-      const uRes = await fetch(`${API_URL}/api/admin/users`, {
+      const uRes = await fetch(`${API_URL}/api/admin/users?t=${Date.now()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (uRes.status === 401) {
@@ -76,7 +76,21 @@ function AdminDashboard() {
 
   useEffect(() => {
     if (token) {
-      Promise.all([fetchDashboardData(), fetchVendorsAndRules(), fetchUsers()]).then(() => setLoading(false));
+      // Initial mount fetch
+      Promise.all([
+        fetchDashboardData(),
+        fetchVendorsAndRules(),
+        fetchUsers()
+      ]).then(() => setLoading(false));
+
+      // Auto-polling interval every 10 seconds to keep metrics in sync
+      const interval = setInterval(() => {
+        fetchDashboardData();
+        fetchVendorsAndRules();
+        fetchUsers();
+      }, 10000);
+
+      return () => clearInterval(interval);
     }
   }, [token]);
 
@@ -148,6 +162,27 @@ function AdminDashboard() {
     }
   };
 
+  const handleDeleteUser = async (email) => {
+    if (!confirm(`Are you sure you want to delete user ${email}?`)) return;
+    try {
+      const response = await fetch(`${API_URL}/api/admin/users/${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        fetchUsers();
+      } else {
+        const data = await response.json();
+        alert(data.detail || "Failed to delete user");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting user");
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '10px' }}>
@@ -177,26 +212,61 @@ function AdminDashboard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', animation: 'slide-in 0.4s ease', width: '100%', maxWidth: '100%', alignItems: 'stretch' }}>
       {/* Dashboard Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ 
-          backgroundColor: 'var(--sap-accent-light)', 
-          padding: '8px', 
-          borderRadius: '6px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px solid rgba(10, 110, 209, 0.15)'
-        }}>
-          <Activity size={20} style={{ color: 'var(--sap-accent)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ 
+            backgroundColor: 'var(--sap-accent-light)', 
+            padding: '8px', 
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid rgba(10, 110, 209, 0.15)'
+          }}>
+            <Activity size={20} style={{ color: 'var(--sap-accent)' }} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--sap-text-color)', letterSpacing: '-0.01em' }}>
+              Executive Admin Dashboard
+            </h1>
+            <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
+              System volume stats, vendor access controls, and category compliance rules.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--sap-text-color)', letterSpacing: '-0.01em' }}>
-            Executive Admin Dashboard
-          </h1>
-          <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
-            System volume stats, vendor access controls, and category compliance rules.
-          </p>
-        </div>
+
+        <button
+          onClick={async () => {
+            setLoading(true);
+            await Promise.all([fetchDashboardData(), fetchVendorsAndRules(), fetchUsers()]);
+            setLoading(false);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            backgroundColor: 'var(--sap-card-bg)',
+            border: '1px solid var(--sap-border)',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            color: 'var(--sap-text-color)',
+            transition: 'background-color 0.15s, border-color 0.15s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--sap-accent-light)';
+            e.currentTarget.style.borderColor = 'var(--sap-accent)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--sap-card-bg)';
+            e.currentTarget.style.borderColor = 'var(--sap-border)';
+          }}
+        >
+          <RefreshCw size={12} className={loading ? "animate-spin" : ""} style={{ animation: loading ? 'spin 1.5s linear infinite' : 'none' }} />
+          Refresh Metrics
+        </button>
       </div>
 
       {/* KPI Stats Panel Grid */}
@@ -499,19 +569,46 @@ function AdminDashboard() {
               <thead>
                 <tr style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                   <th>Operator Email</th>
-                  <th style={{ textAlign: 'right' }}>Role</th>
+                  <th>Role</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map(u => (
                   <tr key={u.id}>
-                    <td style={{ fontWeight: '600', color: 'var(--sap-text-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                    <td style={{ fontWeight: '600', color: 'var(--sap-text-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
                       {u.email}
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td>
                       <span className={`badge ${u.role === 'admin' ? 'badge-green' : 'badge-gray'}`} style={{ textTransform: 'capitalize' }}>
                         {u.role}
                       </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {u.email !== user?.email ? (
+                        <button
+                          onClick={() => handleDeleteUser(u.email)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--sap-error-text)',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '4px',
+                            transition: 'background-color 0.15s'
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--sap-error-bg)'}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          title="Delete User"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: 'var(--sap-text-muted)', fontStyle: 'italic' }}>Active Admin</span>
+                      )}
                     </td>
                   </tr>
                 ))}

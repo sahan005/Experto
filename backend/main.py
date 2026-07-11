@@ -301,6 +301,25 @@ async def get_users(admin: dict = Depends(get_admin_user)):
     conn.close()
     return users
 
+@app.delete("/api/admin/users/{email}")
+async def delete_user(email: str, admin: dict = Depends(get_admin_user)):
+    if email == admin["email"]:
+        raise HTTPException(status_code=400, detail="Cannot delete currently logged-in admin")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    if not user:
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    cursor.execute("DELETE FROM users WHERE email = ?", (email,))
+    conn.commit()
+    conn.close()
+    return {"message": f"User {email} deleted successfully"}
+
+
 @app.get("/api/admin/rules")
 async def get_rules(admin: dict = Depends(get_admin_user)):
     conn = get_db()
@@ -480,6 +499,144 @@ async def confirm_mapping(request: ConfirmMappingRequest):
     conn.close()
     
     return {"message": f"Successfully inserted {inserted} rows"}
+
+def generate_highlighted_csv(current_file: str, context, conn) -> str:
+    cursor = conn.cursor()
+    
+    # Fetch blocked vendors
+    cursor.execute("SELECT vendor_name FROM vendors WHERE status = 'blocked'")
+    blocked_vendors = {r["vendor_name"] for r in cursor.fetchall()}
+    
+    # Fetch category pricing rules
+    cursor.execute("SELECT * FROM category_rules")
+    category_rules = {r["category_name"]: dict(r) for r in cursor.fetchall()}
+    
+    # Fetch all rows for this file
+    cursor.execute("SELECT * FROM invoices WHERE source_file = ? ORDER BY id ASC", (current_file,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    
+    # Parse context dates
+    start_date = None
+    end_date = None
+    if context.expected_start_date:
+        try:
+            start_date = datetime.strptime(context.expected_start_date, "%Y-%m-%d")
+        except ValueError:
+            pass
+    if context.expected_end_date:
+        try:
+            end_date = datetime.strptime(context.expected_end_date, "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    columns = [
+        "invoice_id", "vendor_name", "vendor_id", "invoice_date", "due_date",
+        "line_item_description", "quantity", "unit_price", "total_amount",
+        "currency", "tax_amount", "discount", "purchase_order_number",
+        "payment_status", "department", "approver_name"
+    ]
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write headers
+    writer.writerow([col.replace('_', ' ').title() for col in columns])
+    
+    for row in rows:
+        highlighted_row = []
+        inv_id = row.get("invoice_id")
+        
+        # Check duplicate invoice ID
+        is_duplicate = False
+        if inv_id:
+            cursor.execute("SELECT DISTINCT source_file FROM invoices WHERE invoice_id = ? AND source_file != ?", (inv_id, current_file))
+            if len(cursor.fetchall()) > 0:
+                is_duplicate = True
+        
+        for col in columns:
+            val = row.get(col)
+            val_str = str(val) if val is not None else ""
+            anomalies = []
+            
+            # Check individual column anomalies
+            # 1. Missing Values
+            is_missing = val is None or val_str.strip() == ""
+            if is_missing:
+                # Respect PO numbers required setting
+                if col == "purchase_order_number":
+                    if context.po_numbers_required:
+                        anomalies.append("Missing PO Number")
+                else:
+                    anomalies.append("Missing Value")
+            
+            # If not missing, check other conditions
+            else:
+                # 2. Unexpected Currency
+                if col == "currency" and context.expected_currency:
+                    if val_str.strip() != context.expected_currency:
+                        anomalies.append(f"Unexpected Currency (Expected {context.expected_currency})")
+                
+                # 3. Duplicate Invoice ID
+                elif col == "invoice_id" and is_duplicate:
+                    anomalies.append("Duplicate Invoice ID")
+                
+                # 4. Out of Date Range / Invalid Date
+                elif col in ["invoice_date", "due_date"]:
+                    try:
+                        dt = datetime.strptime(val_str.strip(), "%Y-%m-%d")
+                        if col == "invoice_date":
+                            if (start_date and dt < start_date) or (end_date and dt > end_date):
+                                anomalies.append("Date Out of Range")
+                    except ValueError:
+                        anomalies.append("Invalid Date Format")
+                
+                # 5. Unexpected Payment Status
+                elif col == "payment_status" and context.expected_payment_status:
+                    if val_str.strip().lower() != context.expected_payment_status.lower():
+                        anomalies.append(f"Unexpected Payment Status (Expected {context.expected_payment_status})")
+                
+                # 6. Negative Values
+                elif col in ["quantity", "unit_price", "total_amount", "tax_amount", "discount"]:
+                    try:
+                        num_val = float(val)
+                        if num_val < 0:
+                            anomalies.append("Negative Value")
+                    except ValueError:
+                        pass
+                
+                # 7. Blocked Vendor
+                elif col == "vendor_name" and val_str in blocked_vendors:
+                    anomalies.append("Vendor Suspended")
+                
+                # 8. Category Pricing Rules
+                elif col == "unit_price":
+                    desc = row.get("line_item_description")
+                    if desc and desc in category_rules:
+                        rule = category_rules[desc]
+                        try:
+                            p = float(val)
+                            if rule["min_price"] is not None and p < rule["min_price"]:
+                                anomalies.append(f"Price below limit ({rule['min_price']})")
+                            if rule["max_price"] is not None and p > rule["max_price"]:
+                                anomalies.append(f"Price exceeds limit ({rule['max_price']})")
+                        except ValueError:
+                            pass
+            
+            # Format the output value
+            if anomalies:
+                reason = ", ".join(anomalies)
+                if is_missing:
+                    highlighted_val = f"[ANOMALY: {reason}]"
+                else:
+                    highlighted_val = f"[ANOMALY: {reason}] {val_str}"
+            else:
+                highlighted_val = val_str
+                
+            highlighted_row.append(highlighted_val)
+            
+        writer.writerow(highlighted_row)
+        
+    return output.getvalue()
 
 @app.post("/api/chat", response_model=ChatMessageResponse)
 async def chat(request: ChatMessageRequest):
@@ -767,12 +924,17 @@ async def chat(request: ChatMessageRequest):
                 except (ValueError, TypeError):
                     pass
 
+    highlighted_csv = None
+    if current_file:
+        highlighted_csv = generate_highlighted_csv(current_file, request.context, conn)
+
     conn.close()
     
     if not anomalies:
         return ChatMessageResponse(
             response="I analyzed the database based on your criteria, and no anomalies were found.",
-            anomaly_count=0
+            anomaly_count=0,
+            highlighted_csv=highlighted_csv
         )
         
     filtered_anomalies = anomalies
@@ -886,7 +1048,8 @@ async def chat(request: ChatMessageRequest):
     return ChatMessageResponse(
         response=narration,
         anomaly_count=len(filtered_anomalies),
-        raw_csv="\n".join(raw_csv_lines)
+        raw_csv="\n".join(raw_csv_lines),
+        highlighted_csv=highlighted_csv
     )
 
 if __name__ == "__main__":
