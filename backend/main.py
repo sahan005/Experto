@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 from models import (
     ColumnMappingRequest, ColumnMappingResponse, MappedColumn,
     ConfirmMappingRequest, ChatMessageRequest, ChatMessageResponse,
-    UserLogin, Token, UserResponse, VendorStatusUpdate, CategoryRuleCreate
+    UserLogin, Token, UserResponse, VendorStatusUpdate, CategoryRuleCreate, VendorCreate
 )
 import bcrypt
 from jose import JWTError, jwt
@@ -82,6 +82,14 @@ app.add_middleware(
 def startup_event():
     init_db()
 
+
+def format_field_name(name: str) -> str:
+    if not name:
+        return ""
+    if name == "Qty":
+        return "Quantity"
+    return name.replace("_", " ")
+
 @app.post("/api/auth/login", response_model=Token)
 async def login(user_data: UserLogin):
     conn = get_db()
@@ -128,20 +136,20 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     cursor.execute("SELECT COUNT(DISTINCT source_file) as total_invoices FROM invoices")
     total_invoices = cursor.fetchone()["total_invoices"]
     
-    cursor.execute("SELECT SUM(total_amount) as total_spend FROM invoices")
+    cursor.execute("SELECT SUM(Line_Amount) as total_spend FROM invoices")
     total_spend = cursor.fetchone()["total_spend"] or 0
     
-    cursor.execute("SELECT department, SUM(total_amount) as spend FROM invoices GROUP BY department")
+    cursor.execute("SELECT Bank_Account, SUM(Line_Amount) as spend FROM invoices GROUP BY Bank_Account")
     spend_by_dept = [dict(row) for row in cursor.fetchall()]
     
-    cursor.execute("SELECT vendor_name, COUNT(*) as count FROM invoices GROUP BY vendor_name ORDER BY count DESC LIMIT 5")
+    cursor.execute("SELECT Vendor_Name, COUNT(*) as count FROM invoices GROUP BY Vendor_Name ORDER BY count DESC LIMIT 5")
     top_vendors = [dict(row) for row in cursor.fetchall()]
 
     # Daily processing volume (grouped by upload/processing date)
     cursor.execute("""
         SELECT 
             DATE(upload_timestamp) as date, 
-            SUM(total_amount) as amount, 
+            SUM(Line_Amount) as amount, 
             COUNT(DISTINCT source_file) as count
         FROM invoices 
         WHERE upload_timestamp IS NOT NULL
@@ -153,41 +161,42 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     # Compute anomalies count dynamically for the entire DB
     # 1. Missing PO Numbers
     cursor.execute("""
-        SELECT invoice_id, vendor_name 
+        SELECT Invoice_ID, Vendor_Name 
         FROM invoices 
-        GROUP BY source_file, invoice_id, vendor_name 
-        HAVING MAX(purchase_order_number) IS NULL OR MAX(purchase_order_number) = ''
+        GROUP BY source_file, Invoice_ID, Vendor_Name 
+        HAVING MAX(PO_Number) IS NULL OR MAX(PO_Number) = ''
     """)
     po_anomalies = len(cursor.fetchall())
     
     # 2. Unexpected Currency (assume 'USD' is expected)
-    cursor.execute("SELECT COUNT(DISTINCT invoice_id) as count FROM invoices WHERE currency != 'USD' AND currency IS NOT NULL AND currency != ''")
+    cursor.execute("SELECT COUNT(DISTINCT Invoice_ID) as count FROM invoices WHERE 1=0")
     currency_anomalies = cursor.fetchone()["count"]
     
     # 3. Duplicate Invoices
     cursor.execute("""
-        SELECT invoice_id, COUNT(DISTINCT source_file) as file_count
+        SELECT Invoice_ID, COUNT(DISTINCT source_file) as file_count
         FROM invoices 
-        WHERE invoice_id IS NOT NULL AND invoice_id != ''
-        GROUP BY invoice_id
+        WHERE Invoice_ID IS NOT NULL AND Invoice_ID != ''
+        GROUP BY Invoice_ID
         HAVING file_count > 1
     """)
     dup_anomalies = len(cursor.fetchall())
     
     # 4. Invalid Date Format
-    cursor.execute("SELECT DISTINCT invoice_id, invoice_date FROM invoices WHERE invoice_date IS NOT NULL AND invoice_date != ''")
+    cursor.execute("SELECT DISTINCT Invoice_ID, Invoice_Date FROM invoices WHERE Invoice_Date IS NOT NULL AND Invoice_Date != ''")
     date_anomalies = 0
     for row in cursor.fetchall():
         try:
-            datetime.strptime(row["invoice_date"], "%Y-%m-%d")
+            datetime.strptime(row["Invoice_Date"], "%Y-%m-%d")
         except ValueError:
             date_anomalies += 1
 
     # 5. Missing Values (except PO number)
     standard_fields = [
-        "invoice_id", "vendor_name", "vendor_id", "invoice_date", "due_date",
-        "line_item_description", "quantity", "unit_price", "total_amount",
-        "currency", "tax_amount", "discount", "payment_status", "department", "approver_name"
+        "Invoice_ID", "Invoice_Date", "Due_Date", "Vendor_Name", "Vendor_GSTIN", 
+        "PO_Number", "Payment_Terms", "Line_No", "Line_Item_Description", "Qty", 
+        "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", 
+        "Grand_Total", "Bank_Account", "Invoice_Status"
     ]
     cursor.execute("SELECT * FROM invoices")
     all_rows = cursor.fetchall()
@@ -195,8 +204,8 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     seen_missing = set()
     missing_anomalies = 0
     for row in all_rows:
-        inv_id = row["invoice_id"] or "Unknown"
-        vendor = row["vendor_name"] or "Unknown"
+        inv_id = row["Invoice_ID"] or "Unknown"
+        vendor = row["Vendor_Name"] or "Unknown"
         for col in standard_fields:
             val = row[col]
             if val is None or str(val).strip() == "":
@@ -209,9 +218,9 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     seen_negatives = set()
     negative_anomalies = 0
     for row in all_rows:
-        inv_id = row["invoice_id"] or "Unknown"
-        vendor = row["vendor_name"] or "Unknown"
-        for col in ["quantity", "unit_price", "total_amount", "tax_amount", "discount"]:
+        inv_id = row["Invoice_ID"] or "Unknown"
+        vendor = row["Vendor_Name"] or "Unknown"
+        for col in ["Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"]:
             val = row[col]
             if val is not None:
                 try:
@@ -224,16 +233,57 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
                 except (ValueError, TypeError):
                     pass
                     
-    # 7. Vendor Status Warning
-    cursor.execute("SELECT vendor_name FROM vendors WHERE status = 'blocked'")
-    blocked_vendors = {r["vendor_name"] for r in cursor.fetchall()}
+    # 7. Vendor Status and Mismatch Warnings (Vendor Master checks)
+    cursor.execute("SELECT Vendor_ID, Vendor_Name, GSTIN, Bank_Account, Payment_Terms, Status FROM vendors")
+    master_vendors = {r["Vendor_Name"]: dict(r) for r in cursor.fetchall()}
     seen_vendor_warnings = set()
     vendor_warnings = 0
     for row in all_rows:
-        vendor = row["vendor_name"] or "Unknown"
-        if vendor in blocked_vendors:
-            if vendor not in seen_vendor_warnings:
-                seen_vendor_warnings.add(vendor)
+        inv_id = row["Invoice_ID"] or "Unknown"
+        vendor = row["Vendor_Name"] or "Unknown"
+        inv_gstin = row["Vendor_GSTIN"]
+        inv_bank = row["Bank_Account"]
+        inv_terms = row["Payment_Terms"]
+        
+        if not vendor or vendor.strip() == "":
+            continue
+            
+        # Check unknown
+        if vendor not in master_vendors:
+            key = (inv_id, vendor, "Unknown Vendor")
+            if key not in seen_vendor_warnings:
+                seen_vendor_warnings.add(key)
+                vendor_warnings += 1
+            continue
+            
+        master = master_vendors[vendor]
+        
+        # Check blocked
+        if master["Status"].strip().title() == "Blocked":
+            key = (inv_id, vendor, "Blocked Vendor")
+            if key not in seen_vendor_warnings:
+                seen_vendor_warnings.add(key)
+                vendor_warnings += 1
+                
+        # Check GSTIN mismatch
+        if inv_gstin and master["GSTIN"] and str(inv_gstin).strip() != str(master["GSTIN"]).strip():
+            key = (inv_id, vendor, "GSTIN Mismatch")
+            if key not in seen_vendor_warnings:
+                seen_vendor_warnings.add(key)
+                vendor_warnings += 1
+                
+        # Check Bank mismatch
+        if inv_bank and master["Bank_Account"] and str(inv_bank).strip() != str(master["Bank_Account"]).strip():
+            key = (inv_id, vendor, "Bank Account Mismatch")
+            if key not in seen_vendor_warnings:
+                seen_vendor_warnings.add(key)
+                vendor_warnings += 1
+                
+        # Check Terms mismatch
+        if inv_terms and master["Payment_Terms"] and str(inv_terms).strip() != str(master["Payment_Terms"]).strip():
+            key = (inv_id, vendor, "Payment Terms Mismatch")
+            if key not in seen_vendor_warnings:
+                seen_vendor_warnings.add(key)
                 vendor_warnings += 1
                 
     # 8. Category Pricing Rules
@@ -241,10 +291,10 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     category_rules = {r["category_name"]: dict(r) for r in cursor.fetchall()}
     pricing_anomalies = 0
     for row in all_rows:
-        desc = row["line_item_description"]
+        desc = row["Line_Item_Description"]
         if desc and desc in category_rules:
             rule = category_rules[desc]
-            price = row["unit_price"]
+            price = row["Unit_Price"]
             if price is not None:
                 try:
                     p = float(price)
@@ -280,17 +330,38 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
 async def get_vendors(admin: dict = Depends(get_admin_user)):
     conn = get_db()
     cursor = conn.cursor()
-    # Fetch all unique vendor names from invoices, and left join with their status in vendors table.
-    # If not present in vendors table, status defaults to 'active'.
     cursor.execute("""
-        SELECT DISTINCT i.vendor_name, COALESCE(v.status, 'active') as status
-        FROM invoices i
-        LEFT JOIN vendors v ON i.vendor_name = v.vendor_name
-        WHERE i.vendor_name IS NOT NULL AND i.vendor_name != ''
+        SELECT Vendor_ID, Vendor_Name, GSTIN, Bank_Account, Payment_Terms, Status
+        FROM vendors
     """)
     vendors = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return vendors
+
+@app.post("/api/admin/vendors")
+async def add_vendor(vendor: VendorCreate, admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO vendors (Vendor_ID, Vendor_Name, GSTIN, Bank_Account, Payment_Terms, Status)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (vendor.Vendor_ID, vendor.Vendor_Name, vendor.GSTIN, vendor.Bank_Account, vendor.Payment_Terms, vendor.Status or "Active"))
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Vendor ID or Vendor Name already exists")
+    conn.close()
+    return {"message": "Vendor added successfully"}
+
+@app.delete("/api/admin/vendors/{Vendor_ID}")
+async def delete_vendor(Vendor_ID: str, admin: dict = Depends(get_admin_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM vendors WHERE Vendor_ID = ?", (Vendor_ID,))
+    conn.commit()
+    conn.close()
+    return {"message": f"Vendor {Vendor_ID} deleted successfully"}
 
 @app.get("/api/admin/users", response_model=List[UserResponse])
 async def get_users(admin: dict = Depends(get_admin_user)):
@@ -345,18 +416,17 @@ async def create_rule(rule: CategoryRuleCreate, admin: dict = Depends(get_admin_
     conn.close()
     return {"message": "Rule saved successfully"}
 
-@app.put("/api/admin/vendors/{vendor_name}/status")
-async def update_vendor_status(vendor_name: str, status_update: VendorStatusUpdate, admin: dict = Depends(get_admin_user)):
+@app.put("/api/admin/vendors/{Vendor_Name}/status")
+async def update_vendor_status(Vendor_Name: str, status_update: VendorStatusUpdate, admin: dict = Depends(get_admin_user)):
     conn = get_db()
     cursor = conn.cursor()
-    # Insert or update
+    new_status = status_update.status.strip().title()
     cursor.execute("""
-        INSERT INTO vendors (vendor_name, status) VALUES (?, ?)
-        ON CONFLICT(vendor_name) DO UPDATE SET status=excluded.status
-    """, (vendor_name, status_update.status))
+        UPDATE vendors SET Status = ? WHERE Vendor_Name = ?
+    """, (new_status, Vendor_Name))
     conn.commit()
     conn.close()
-    return {"message": f"Vendor {vendor_name} status updated to {status_update.status}"}
+    return {"message": f"Vendor {Vendor_Name} status updated to {new_status}"}
 
 @app.get("/api/standard_fields")
 async def get_standard_fields():
@@ -504,8 +574,8 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
     cursor = conn.cursor()
     
     # Fetch blocked vendors
-    cursor.execute("SELECT vendor_name FROM vendors WHERE status = 'blocked'")
-    blocked_vendors = {r["vendor_name"] for r in cursor.fetchall()}
+    cursor.execute("SELECT Vendor_Name FROM vendors WHERE status = 'blocked'")
+    blocked_vendors = {r["Vendor_Name"] for r in cursor.fetchall()}
     
     # Fetch category pricing rules
     cursor.execute("SELECT * FROM category_rules")
@@ -530,10 +600,10 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
             pass
 
     columns = [
-        "invoice_id", "vendor_name", "vendor_id", "invoice_date", "due_date",
-        "line_item_description", "quantity", "unit_price", "total_amount",
-        "currency", "tax_amount", "discount", "purchase_order_number",
-        "payment_status", "department", "approver_name"
+        "Invoice_ID", "Vendor_Name", "Vendor_GSTIN", "Invoice_Date", "Due_Date",
+        "Line_Item_Description", "Qty", "Unit_Price", "Line_Amount",
+        "currency", "Tax", "Discount", "PO_Number",
+        "Invoice_Status", "Bank_Account", "approver_name"
     ]
     
     output = io.StringIO()
@@ -544,12 +614,12 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
     
     for row in rows:
         highlighted_row = []
-        inv_id = row.get("invoice_id")
+        inv_id = row.get("Invoice_ID")
         
         # Check duplicate invoice ID
         is_duplicate = False
         if inv_id:
-            cursor.execute("SELECT DISTINCT source_file FROM invoices WHERE invoice_id = ? AND source_file != ?", (inv_id, current_file))
+            cursor.execute("SELECT DISTINCT source_file FROM invoices WHERE Invoice_ID = ? AND source_file != ?", (inv_id, current_file))
             if len(cursor.fetchall()) > 0:
                 is_duplicate = True
         
@@ -563,8 +633,8 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
             is_missing = val is None or val_str.strip() == ""
             if is_missing:
                 # Respect PO numbers required setting
-                if col == "purchase_order_number":
-                    if context.po_numbers_required:
+                if col == "PO_Number":
+                    if context.audit_mode == "single" and context.expected_po_number:
                         anomalies.append("Missing PO Number")
                 else:
                     anomalies.append("Missing Value")
@@ -572,31 +642,30 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
             # If not missing, check other conditions
             else:
                 # 2. Unexpected Currency
-                if col == "currency" and context.expected_currency:
+                if False:
                     if val_str.strip() != context.expected_currency:
                         anomalies.append(f"Unexpected Currency (Expected {context.expected_currency})")
                 
                 # 3. Duplicate Invoice ID
-                elif col == "invoice_id" and is_duplicate:
+                elif col == "Invoice_ID" and is_duplicate:
                     anomalies.append("Duplicate Invoice ID")
                 
                 # 4. Out of Date Range / Invalid Date
-                elif col in ["invoice_date", "due_date"]:
+                elif col in ["Invoice_Date", "Due_Date"]:
                     try:
                         dt = datetime.strptime(val_str.strip(), "%Y-%m-%d")
-                        if col == "invoice_date":
+                        if col == "Invoice_Date":
                             if (start_date and dt < start_date) or (end_date and dt > end_date):
                                 anomalies.append("Date Out of Range")
                     except ValueError:
                         anomalies.append("Invalid Date Format")
                 
-                # 5. Unexpected Payment Status
-                elif col == "payment_status" and context.expected_payment_status:
-                    if val_str.strip().lower() != context.expected_payment_status.lower():
-                        anomalies.append(f"Unexpected Payment Status (Expected {context.expected_payment_status})")
+                # 5. Unexpected Payment Status (Removed)
+                elif False:
+                    pass
                 
                 # 6. Negative Values
-                elif col in ["quantity", "unit_price", "total_amount", "tax_amount", "discount"]:
+                elif col in ["Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"]:
                     try:
                         num_val = float(val)
                         if num_val < 0:
@@ -605,12 +674,12 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
                         pass
                 
                 # 7. Blocked Vendor
-                elif col == "vendor_name" and val_str in blocked_vendors:
+                elif col == "Vendor_Name" and val_str in blocked_vendors:
                     anomalies.append("Vendor Suspended")
                 
                 # 8. Category Pricing Rules
-                elif col == "unit_price":
-                    desc = row.get("line_item_description")
+                elif col == "Unit_Price":
+                    desc = row.get("Line_Item_Description")
                     if desc and desc in category_rules:
                         rule = category_rules[desc]
                         try:
@@ -668,96 +737,115 @@ async def chat(request: ChatMessageRequest):
         base_where += " AND source_file = ?"
         base_params.append(current_file)
     
-    if filters.get("vendor_name"):
-        base_where += " AND vendor_name LIKE ?"
-        base_params.append(f"%{filters['vendor_name']}%")
+    if filters.get("Vendor_Name"):
+        base_where += " AND Vendor_Name LIKE ?"
+        base_params.append(f"%{filters['Vendor_Name']}%")
         
     if filters.get("min_amount") is not None:
-        base_where += " AND CAST(total_amount AS REAL) >= ?"
+        base_where += " AND CAST(Line_Amount AS REAL) >= ?"
         base_params.append(filters["min_amount"])
         
     if filters.get("max_amount") is not None:
-        base_where += " AND CAST(total_amount AS REAL) <= ?"
+        base_where += " AND CAST(Line_Amount AS REAL) <= ?"
         base_params.append(filters["max_amount"])
         
     if filters.get("start_date"):
-        base_where += " AND invoice_date >= ?"
+        base_where += " AND Invoice_Date >= ?"
         base_params.append(filters["start_date"])
         
     if filters.get("end_date"):
-        base_where += " AND invoice_date <= ?"
+        base_where += " AND Invoice_Date <= ?"
         base_params.append(filters["end_date"])
         
-    if filters.get("payment_status"):
-        base_where += " AND payment_status LIKE ?"
-        base_params.append(f"%{filters['payment_status']}%")
+    if filters.get("Invoice_Status"):
+        base_where += " AND Invoice_Status LIKE ?"
+        base_params.append(f"%{filters['Invoice_Status']}%")
         
-    # 1. Missing PO Numbers
-    if ("all" in categories or "po_number" in categories) and request.context.po_numbers_required:
-        query = f"""SELECT invoice_id, vendor_name 
+    # 1. Missing / Mismatch PO Numbers (Only in single audit mode)
+    if request.context.audit_mode == "single" and request.context.expected_po_number:
+        query = f"""SELECT Invoice_ID, Vendor_Name, PO_Number 
                     FROM invoices 
                     WHERE ({base_where}) 
-                    GROUP BY source_file, invoice_id, vendor_name 
-                    HAVING MAX(purchase_order_number) IS NULL OR MAX(purchase_order_number) = ''"""
+                    GROUP BY source_file, Invoice_ID, Vendor_Name"""
         cursor.execute(query, base_params)
         for row in cursor.fetchall():
-            anomalies.append({
-                "type": "Missing PO Number",
-                "invoice_id": row["invoice_id"],
-                "vendor_name": row["vendor_name"]
-            })
+            po_num = str(row["PO_Number"]).strip() if row["PO_Number"] else ""
+            if not po_num or po_num != str(request.context.expected_po_number).strip():
+                anomalies.append({
+                    "type": "PO Number Mismatch",
+                    "Invoice_ID": row["Invoice_ID"],
+                    "Vendor_Name": row["Vendor_Name"],
+                    "description": f"Invoice PO Number '{po_num}' does not match expected PO '{request.context.expected_po_number}'."
+                })
+                
+    # 1b. Date Mismatch (Only in single audit mode)
+    if request.context.audit_mode == "single" and request.context.expected_invoice_date:
+        query = f"""SELECT Invoice_ID, Vendor_Name, Invoice_Date 
+                    FROM invoices 
+                    WHERE ({base_where}) 
+                    GROUP BY source_file, Invoice_ID, Vendor_Name"""
+        cursor.execute(query, base_params)
+        for row in cursor.fetchall():
+            inv_date = str(row["Invoice_Date"]).strip() if row["Invoice_Date"] else ""
+            if not inv_date or inv_date != str(request.context.expected_invoice_date).strip():
+                anomalies.append({
+                    "type": "Invoice Date Mismatch",
+                    "Invoice_ID": row["Invoice_ID"],
+                    "Vendor_Name": row["Vendor_Name"],
+                    "description": f"Invoice Date '{inv_date}' does not match expected Date '{request.context.expected_invoice_date}'."
+                })
             
     # 2. Unexpected Currency
-    if ("all" in categories or "currency" in categories) and request.context.expected_currency:
-        query = f"""SELECT invoice_id, vendor_name, MAX(currency) as currency 
+    if False:
+        query = f"""SELECT Invoice_ID, Vendor_Name, MAX(currency) as currency 
                     FROM invoices 
-                    WHERE ({base_where}) AND currency != ? AND currency IS NOT NULL 
-                    GROUP BY source_file, invoice_id, vendor_name"""
+                    WHERE ({base_where}) AND 1=0 
+                    GROUP BY source_file, Invoice_ID, Vendor_Name"""
         cursor.execute(query, base_params + [request.context.expected_currency])
         for row in cursor.fetchall():
             anomalies.append({
                 "type": "Unexpected Currency",
-                "invoice_id": row["invoice_id"],
-                "vendor_name": row["vendor_name"],
+                "Invoice_ID": row["Invoice_ID"],
+                "Vendor_Name": row["Vendor_Name"],
                 "currency": row["currency"]
             })
             
     # 3. Duplicate Invoices
     if ("all" in categories or "duplicate" in categories) and current_file:
-        cursor.execute("SELECT DISTINCT invoice_id, vendor_name FROM invoices WHERE source_file = ?", (current_file,))
+        cursor.execute("SELECT DISTINCT Invoice_ID, Vendor_Name FROM invoices WHERE source_file = ?", (current_file,))
         current_props = cursor.fetchall()
         
         for prop in current_props:
-            inv_id = prop["invoice_id"]
-            vendor = prop["vendor_name"]
+            inv_id = prop["Invoice_ID"]
+            vendor = prop["Vendor_Name"]
             
             if inv_id:
-                cursor.execute("SELECT DISTINCT source_file FROM invoices WHERE invoice_id = ? AND source_file != ?", (inv_id, current_file))
+                cursor.execute("SELECT DISTINCT source_file FROM invoices WHERE Invoice_ID = ? AND source_file != ?", (inv_id, current_file))
                 other_files = cursor.fetchall()
                 if len(other_files) > 0:
                     anomalies.append({
                         "type": "Duplicate Invoice ID",
-                        "invoice_id": inv_id,
-                        "vendor_name": vendor,
+                        "Invoice_ID": inv_id,
+                        "Vendor_Name": vendor,
                         "count": len(other_files) + 1
                     })
             else:
-                cursor.execute("SELECT SUM(total_amount) FROM invoices WHERE source_file = ?", (current_file,))
+                cursor.execute("SELECT SUM(Line_Amount) FROM invoices WHERE source_file = ?", (current_file,))
                 current_sum = cursor.fetchone()[0]
                 
                 if current_sum and vendor:
                     cursor.execute("""
                         SELECT source_file FROM invoices 
-                        WHERE source_file != ? AND vendor_name = ?
+                        WHERE source_file != ? AND Vendor_Name = ?
                         GROUP BY source_file
-                        HAVING SUM(total_amount) = ?
+                        HAVING SUM(Line_Amount) = ?
                     """, (current_file, vendor, current_sum))
                     other_files = cursor.fetchall()
                     if len(other_files) > 0:
                         anomalies.append({
                             "type": "Duplicate Invoice (Exact Match)",
-                            "invoice_id": "Unknown",
-                            "vendor_name": vendor,
+                            "Invoice_ID": "Unknown",
+                            "Vendor_Name": vendor,
                             "count": len(other_files) + 1
                         })
 
@@ -777,44 +865,32 @@ async def chat(request: ChatMessageRequest):
                 pass
                 
         if start_date or end_date:
-            query = f"""SELECT invoice_id, vendor_name, MAX(invoice_date) as invoice_date 
+            query = f"""SELECT Invoice_ID, Vendor_Name, MAX(Invoice_Date) as Invoice_Date 
                         FROM invoices 
-                        WHERE ({base_where}) AND invoice_date IS NOT NULL 
-                        GROUP BY source_file, invoice_id, vendor_name"""
+                        WHERE ({base_where}) AND Invoice_Date IS NOT NULL 
+                        GROUP BY source_file, Invoice_ID, Vendor_Name"""
             cursor.execute(query, base_params)
             for row in cursor.fetchall():
                 try:
-                    inv_date = datetime.strptime(row["invoice_date"], "%Y-%m-%d")
+                    inv_date = datetime.strptime(row["Invoice_Date"], "%Y-%m-%d")
                     if (start_date and inv_date < start_date) or (end_date and inv_date > end_date):
                         anomalies.append({
                             "type": "Date Out of Range",
-                            "invoice_id": row["invoice_id"],
-                            "vendor_name": row["vendor_name"],
-                            "invoice_date": row["invoice_date"]
+                            "Invoice_ID": row["Invoice_ID"],
+                            "Vendor_Name": row["Vendor_Name"],
+                            "Invoice_Date": row["Invoice_Date"]
                         })
                 except ValueError:
                     anomalies.append({
                         "type": "Invalid Date Format",
-                        "invoice_id": row["invoice_id"],
-                        "vendor_name": row["vendor_name"],
-                        "invoice_date": row["invoice_date"]
+                        "Invoice_ID": row["Invoice_ID"],
+                        "Vendor_Name": row["Vendor_Name"],
+                        "Invoice_Date": row["Invoice_Date"]
                     })
 
-    # 5. Unexpected Payment Status
-    if ("all" in categories or "payment_status" in categories) and request.context.expected_payment_status:
-        query = f"""SELECT invoice_id, vendor_name, MAX(payment_status) as payment_status 
-                    FROM invoices 
-                    WHERE ({base_where}) AND payment_status IS NOT NULL 
-                    GROUP BY source_file, invoice_id, vendor_name"""
-        cursor.execute(query, base_params)
-        for row in cursor.fetchall():
-            if row["payment_status"].lower() != request.context.expected_payment_status.lower():
-                anomalies.append({
-                    "type": "Unexpected Payment Status",
-                    "invoice_id": row["invoice_id"],
-                    "vendor_name": row["vendor_name"],
-                    "payment_status": row["payment_status"]
-                })
+    # 5. Unexpected Payment Status (Removed)
+    if False:
+        pass
 
     query = f"SELECT * FROM invoices WHERE ({base_where})"
     cursor.execute(query, base_params)
@@ -824,17 +900,17 @@ async def chat(request: ChatMessageRequest):
     if "all" in categories or "missing_value" in categories or "missing_data" in categories:
         seen_missing = set()
         for row in all_rows:
-            inv_id = row["invoice_id"] or "Unknown"
-            vendor = row["vendor_name"] or "Unknown"
+            inv_id = row["Invoice_ID"] or "Unknown"
+            vendor = row["Vendor_Name"] or "Unknown"
             
             for col in [
-                "invoice_id", "vendor_name", "vendor_id", "invoice_date", "due_date",
-                "line_item_description", "quantity", "unit_price", "total_amount",
-                "currency", "tax_amount", "discount", "purchase_order_number",
-                "payment_status", "department", "approver_name"
+                "Invoice_ID", "Invoice_Date", "Due_Date", "Vendor_Name", "Vendor_GSTIN",
+                "PO_Number", "Payment_Terms", "Line_No", "Line_Item_Description", "Qty",
+                "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping",
+                "Grand_Total", "Bank_Account", "Invoice_Status"
             ]:
-                # Respect PO number requirement setting
-                if col == "purchase_order_number" and not request.context.po_numbers_required:
+                # Respect PO number mismatch logic (PO missing values are audited in mismatch checks)
+                if col == "PO_Number":
                     continue
                     
                 val = row[col]
@@ -844,20 +920,20 @@ async def chat(request: ChatMessageRequest):
                         seen_missing.add(key)
                         anomalies.append({
                             "type": "Missing Value",
-                            "invoice_id": inv_id,
-                            "vendor_name": vendor,
+                            "Invoice_ID": inv_id,
+                            "Vendor_Name": vendor,
                             "column": col,
-                            "description": f"Field '{col}' is missing or null"
+                            "description": f"Field '{format_field_name(col)}' is missing or null"
                         })
 
     # 7. Negative Values
     if "all" in categories or "negative_value" in categories:
         seen_negatives = set()
         for row in all_rows:
-            inv_id = row["invoice_id"] or "Unknown"
-            vendor = row["vendor_name"] or "Unknown"
+            inv_id = row["Invoice_ID"] or "Unknown"
+            vendor = row["Vendor_Name"] or "Unknown"
             
-            for col in ["quantity", "unit_price", "total_amount", "tax_amount", "discount"]:
+            for col in ["Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"]:
                 val = row[col]
                 if val is not None:
                     try:
@@ -868,57 +944,115 @@ async def chat(request: ChatMessageRequest):
                                 seen_negatives.add(key)
                                 anomalies.append({
                                     "type": "Negative Value",
-                                    "invoice_id": inv_id,
-                                    "vendor_name": vendor,
+                                    "Invoice_ID": inv_id,
+                                    "Vendor_Name": vendor,
                                     "column": col,
                                     "value": num_val,
-                                    "description": f"Field '{col}' has a negative value ({num_val})"
+                                    "description": f"Field '{format_field_name(col)}' has a negative value ({num_val})"
                                 })
                     except (ValueError, TypeError):
                         pass
 
-    # 8. Vendor Status Warning (RBAC)
-    cursor.execute("SELECT vendor_name FROM vendors WHERE status = 'blocked'")
-    blocked_vendors = {r["vendor_name"] for r in cursor.fetchall()}
+    # 8. Vendor Master List and Status Checks
+    cursor.execute("SELECT Vendor_ID, Vendor_Name, GSTIN, Bank_Account, Payment_Terms, Status FROM vendors")
+    master_vendors = {r["Vendor_Name"]: dict(r) for r in cursor.fetchall()}
     
-    # 9. Category Pricing Rules (RBAC)
     cursor.execute("SELECT * FROM category_rules")
     category_rules = {r["category_name"]: dict(r) for r in cursor.fetchall()}
     
-    seen_vendor_warnings = set()
+    seen_vendor_master_anomalies = set()
     for row in all_rows:
-        inv_id = row["invoice_id"] or "Unknown"
-        vendor = row["vendor_name"] or "Unknown"
+        inv_id = row["Invoice_ID"] or "Unknown"
+        v_name = row["Vendor_Name"]
+        inv_gstin = row["Vendor_GSTIN"]
+        inv_bank = row["Bank_Account"]
+        inv_terms = row["Payment_Terms"]
         
-        if vendor in blocked_vendors:
-            if vendor not in seen_vendor_warnings:
-                seen_vendor_warnings.add(vendor)
+        if not v_name or v_name.strip() == "":
+            continue
+            
+        # 8a. Unknown Vendor Check
+        if v_name not in master_vendors:
+            anomaly_key = (inv_id, v_name, "Unknown Vendor")
+            if anomaly_key not in seen_vendor_master_anomalies:
+                seen_vendor_master_anomalies.add(anomaly_key)
+                anomalies.append({
+                    "type": "Unknown Vendor",
+                    "Invoice_ID": inv_id,
+                    "Vendor_Name": v_name,
+                    "description": f"Vendor '{v_name}' is not registered in the vendor master list."
+                })
+            continue
+            
+        master = master_vendors[v_name]
+        
+        # 8b. Blocked Vendor Check
+        if master["Status"].strip().title() == "Blocked":
+            anomaly_key = (inv_id, v_name, "Blocked Vendor")
+            if anomaly_key not in seen_vendor_master_anomalies:
+                seen_vendor_master_anomalies.add(anomaly_key)
                 anomalies.append({
                     "type": "Vendor Status Warning",
-                    "invoice_id": inv_id,
-                    "vendor_name": vendor,
-                    "description": f"Vendor '{vendor}' currently has a suspended status in our system. Verify before proceeding."
+                    "Invoice_ID": inv_id,
+                    "Vendor_Name": v_name,
+                    "description": f"Vendor '{v_name}' currently has a suspended/blocked status in our system."
                 })
                 
-        desc = row["line_item_description"]
+        # 8c. GSTIN Mismatch Check
+        if inv_gstin and master["GSTIN"] and str(inv_gstin).strip() != str(master["GSTIN"]).strip():
+            anomaly_key = (inv_id, v_name, "GSTIN Mismatch")
+            if anomaly_key not in seen_vendor_master_anomalies:
+                seen_vendor_master_anomalies.add(anomaly_key)
+                anomalies.append({
+                    "type": "GSTIN Mismatch",
+                    "Invoice_ID": inv_id,
+                    "Vendor_Name": v_name,
+                    "description": f"Invoice GSTIN '{inv_gstin}' does not match registered GSTIN '{master['GSTIN']}'."
+                })
+                
+        # 8d. Bank Account Mismatch Check
+        if inv_bank and master["Bank_Account"] and str(inv_bank).strip() != str(master["Bank_Account"]).strip():
+            anomaly_key = (inv_id, v_name, "Bank Account Mismatch")
+            if anomaly_key not in seen_vendor_master_anomalies:
+                seen_vendor_master_anomalies.add(anomaly_key)
+                anomalies.append({
+                    "type": "Bank Account Mismatch",
+                    "Invoice_ID": inv_id,
+                    "Vendor_Name": v_name,
+                    "description": f"Invoice Bank Account '{inv_bank}' does not match registered Bank Account '{master['Bank_Account']}'."
+                })
+                
+        # 8e. Payment Terms Mismatch Check
+        if inv_terms and master["Payment_Terms"] and str(inv_terms).strip() != str(master["Payment_Terms"]).strip():
+            anomaly_key = (inv_id, v_name, "Payment Terms Mismatch")
+            if anomaly_key not in seen_vendor_master_anomalies:
+                seen_vendor_master_anomalies.add(anomaly_key)
+                anomalies.append({
+                    "type": "Payment Terms Mismatch",
+                    "Invoice_ID": inv_id,
+                    "Vendor_Name": v_name,
+                    "description": f"Invoice Payment Terms '{inv_terms}' does not match registered Payment Terms '{master['Payment_Terms']}'."
+                })
+                
+        desc = row["Line_Item_Description"]
         if desc and desc in category_rules:
             rule = category_rules[desc]
-            price = row["unit_price"]
+            price = row["Unit_Price"]
             if price is not None:
                 try:
                     p = float(price)
                     if rule["min_price"] is not None and p < rule["min_price"]:
                         anomalies.append({
                             "type": "Pricing Anomaly",
-                            "invoice_id": inv_id,
-                            "vendor_name": vendor,
+                            "Invoice_ID": inv_id,
+                            "Vendor_Name": vendor,
                             "description": f"Unit price for '{desc}' (${p}) is below Admin limit (${rule['min_price']})."
                         })
                     if rule["max_price"] is not None and p > rule["max_price"]:
                         anomalies.append({
                             "type": "Pricing Anomaly",
-                            "invoice_id": inv_id,
-                            "vendor_name": vendor,
+                            "Invoice_ID": inv_id,
+                            "Vendor_Name": vendor,
                             "description": f"Unit price for '{desc}' (${p}) exceeds Admin limit (${rule['max_price']})."
                         })
                 except (ValueError, TypeError):
@@ -956,32 +1090,32 @@ async def chat(request: ChatMessageRequest):
         "amount": "",
         "currency": "",
         "po": "",
-        "payment_status": "",
+        "Invoice_Status": "",
         "missing_data": "",
         "negative_value": "",
         "rbac_rule": ""
     })
     
     for a in filtered_anomalies:
-        inv_id = a.get("invoice_id") or "UNKNOWN_ID"
+        inv_id = a.get("Invoice_ID") or "UNKNOWN_ID"
         record = invoice_data[inv_id]
         
         # Capture the actual vendor name if we don't have one yet
-        if a.get("vendor_name") and a.get("vendor_name") != "None" and record["vendor"] == "Unknown":
-            record["vendor"] = a.get("vendor_name")
+        if a.get("Vendor_Name") and a.get("Vendor_Name") != "None" and record["vendor"] == "Unknown":
+            record["vendor"] = a.get("Vendor_Name")
             
         t = a.get("type")
         if t == "Duplicate Invoice ID":
             record["duplicate"] = f"Duplicate ({a.get('count')} occurrences)"
         elif t in ["Date Out of Range", "Invalid Date Format"]:
-            date_val = a.get("invoice_date") or "Missing"
+            date_val = a.get("Invoice_Date") or "Missing"
             existing = record["date"]
             if not existing:
                 record["date"] = f"Out of range ({date_val})"
             elif date_val not in existing:
                 record["date"] = existing.rstrip(")") + f"; {date_val})"
         elif t in ["Amount Out of Range", "Invalid Amount Format"]:
-            amt_val = str(a.get("total_amount") or "Missing")
+            amt_val = str(a.get("Line_Amount") or "Missing")
             existing = record["amount"]
             if not existing:
                 record["amount"] = f"Out of range ({amt_val})"
@@ -994,15 +1128,17 @@ async def chat(request: ChatMessageRequest):
                 record["currency"] = f"Unexpected ({curr_val})"
             elif curr_val not in existing:
                 record["currency"] = existing.rstrip(")") + f"; {curr_val})"
-        elif t == "Missing PO Number":
-            record["po"] = "Missing PO"
+        elif t in ["Missing PO Number", "PO Number Mismatch"]:
+            record["po"] = a.get("description") or "Missing / Mismatch PO"
+        elif t == "Invoice Date Mismatch":
+            record["date"] = a.get("description") or "Date Mismatch"
         elif t == "Unexpected Payment Status":
-            status_val = a.get("payment_status") or "Missing"
-            existing = record["payment_status"]
+            status_val = a.get("Invoice_Status") or "Missing"
+            existing = record["Invoice_Status"]
             if not existing:
-                record["payment_status"] = status_val
+                record["Invoice_Status"] = status_val
             elif status_val not in existing:
-                record["payment_status"] = existing + f"; {status_val}"
+                record["Invoice_Status"] = existing + f"; {status_val}"
         elif t == "Missing Value":
             col_val = a.get("column")
             existing = record["missing_data"]
@@ -1027,22 +1163,18 @@ async def chat(request: ChatMessageRequest):
                 record["rbac_rule"] = existing + f"; {desc}"
 
     raw_csv_lines = [
-        "Invoice ID,Vendor,Duplicate Issues,Date Issues,Amount Issues,Currency Issues,PO Issues,Payment Status Issues,Missing Data Issues,Negative Value Issues,RBAC Rule Issues"
+        "Invoice ID,Vendor Name,Anomaly Type,Description"
     ]
-    for inv_id, data in invoice_data.items():
-        vendor_escaped = data["vendor"].replace('"', '""')
-        dup_escaped = data["duplicate"].replace('"', '""')
-        date_escaped = data["date"].replace('"', '""')
-        amt_escaped = data["amount"].replace('"', '""')
-        curr_escaped = data["currency"].replace('"', '""')
-        po_escaped = data["po"].replace('"', '""')
-        status_escaped = data["payment_status"].replace('"', '""')
-        missing_escaped = data["missing_data"].replace('"', '""')
-        negative_escaped = data["negative_value"].replace('"', '""')
-        rbac_escaped = data["rbac_rule"].replace('"', '""')
+    for a in filtered_anomalies:
+        inv_id = str(a.get("Invoice_ID") or "Unknown").replace('"', '""')
+        vendor = str(a.get("Vendor_Name") or "Unknown").replace('"', '""')
+        anomaly_type = str(a.get("type") or "Unknown").replace('"', '""')
+        # Clean type to remove underscores
+        anomaly_type = format_field_name(anomaly_type)
+        desc = str(a.get("description") or "").replace('"', '""')
         
         raw_csv_lines.append(
-            f'"{inv_id}","{vendor_escaped}","{dup_escaped}","{date_escaped}","{amt_escaped}","{curr_escaped}","{po_escaped}","{status_escaped}","{missing_escaped}","{negative_escaped}","{rbac_escaped}"'
+            f'"{inv_id}","{vendor}","{anomaly_type}","{desc}"'
         )
         
     return ChatMessageResponse(

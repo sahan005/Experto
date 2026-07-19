@@ -46,29 +46,29 @@ function LoginWindow() {
             <div style={{
               width: '32px',
               height: '32px',
-              borderRadius: '4px',
+              borderRadius: '3px',
               backgroundColor: 'var(--sap-accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#ffffff',
-              fontWeight: 'bold',
-              fontSize: '16px'
+              fontWeight: '700',
+              fontSize: '15px'
             }}>
               E
             </div>
             <span style={{ 
-              fontWeight: '800', 
-              fontSize: '18px', 
+              fontWeight: '700', 
+              fontSize: '17px', 
               letterSpacing: '-0.01em', 
               color: '#ffffff' 
             }}>
-              Experto<span style={{ color: '#5bb2ff', fontWeight: '500' }}>.ai</span>
+              Experto<span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '400' }}>.ai</span>
             </span>
           </div>
 
           {/* Marketing Copy */}
-          <h1 style={{ fontSize: '28px', fontWeight: '800', lineHeight: '1.25', letterSpacing: '-0.02em', color: '#ffffff', marginBottom: '16px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: '700', lineHeight: '1.3', letterSpacing: '-0.02em', color: '#ffffff', marginBottom: '16px' }}>
             Automate Invoice Audits with AI Exception Scanning
           </h1>
           <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: '1.6', marginBottom: '32px' }}>
@@ -82,7 +82,7 @@ function LoginWindow() {
                 <Layers size={14} />
               </div>
               <div>
-                <span style={{ fontWeight: '700', fontSize: '13px', display: 'block', color: '#ffffff' }}>Unified Ingestion Portal</span>
+                <span style={{ fontWeight: '600', fontSize: '13px', display: 'block', color: '#ffffff' }}>Unified Ingestion Portal</span>
                 <span style={{ fontSize: '12px', color: '#94a3b8' }}>Map raw data headers to standard database structures.</span>
               </div>
             </div>
@@ -92,7 +92,7 @@ function LoginWindow() {
                 <FileText size={14} />
               </div>
               <div>
-                <span style={{ fontWeight: '700', fontSize: '13px', display: 'block', color: '#ffffff' }}>Multi-Format Processing</span>
+                <span style={{ fontWeight: '600', fontSize: '13px', display: 'block', color: '#ffffff' }}>Multi-Format Processing</span>
                 <span style={{ fontSize: '12px', color: '#94a3b8' }}>Supports CSV sheets, PDF invoices, and image scans.</span>
               </div>
             </div>
@@ -102,7 +102,7 @@ function LoginWindow() {
                 <Shield size={14} />
               </div>
               <div>
-                <span style={{ fontWeight: '700', fontSize: '13px', display: 'block', color: '#ffffff' }}>Interactive Diagnostics</span>
+                <span style={{ fontWeight: '600', fontSize: '13px', display: 'block', color: '#ffffff' }}>Interactive Diagnostics</span>
                 <span style={{ fontSize: '12px', color: '#94a3b8' }}>Isolate and trace anomalies using natural language queries.</span>
               </div>
             </div>
@@ -167,9 +167,9 @@ function LoginWindow() {
               backgroundColor: 'var(--sap-error-bg)', 
               color: 'var(--sap-error-text)', 
               border: '1px solid var(--sap-error-border)',
-              borderRadius: '6px', 
+              borderRadius: '4px', 
               fontSize: '12px', 
-              fontWeight: '600' 
+              fontWeight: '500' 
             }}>
               <Lock size={14} />
               {error}
@@ -182,7 +182,7 @@ function LoginWindow() {
             className="btn btn-primary"
             style={{
               padding: '10px',
-              borderRadius: '6px',
+              borderRadius: '4px',
               fontSize: '13px',
               marginTop: '8px',
               display: 'flex',
@@ -209,13 +209,13 @@ function LoginWindow() {
           marginTop: '24px', 
           padding: '10px 14px', 
           backgroundColor: 'var(--sap-bg)', 
-          borderRadius: '6px', 
+          borderRadius: '4px', 
           border: '1px solid var(--sap-border)',
           fontSize: '12px',
           color: 'var(--sap-text-muted)',
           lineHeight: '1.5'
         }}>
-          <span style={{ fontWeight: '700', color: 'var(--sap-text-color)', display: 'block', marginBottom: '2px' }}>
+          <span style={{ fontWeight: '600', color: 'var(--sap-text-color)', display: 'block', marginBottom: '2px' }}>
             Proof of Concept Portal
           </span>
           Use seeded accounts to sign in (e.g. administrator or audit operator credentials).

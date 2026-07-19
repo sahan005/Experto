@@ -16,7 +16,10 @@ function App() {
     }
   }, [user]);
   
-  const handleMappingConfirmed = () => {
+  const [uploadMode, setUploadMode] = useState('batch');
+
+  const handleMappingConfirmed = (mode) => {
+    setUploadMode(mode || 'batch');
     setCurrentView('chat');
   };
 
@@ -34,76 +37,86 @@ function App() {
       <header style={{ 
         backgroundColor: 'var(--sap-shell-bg)', 
         color: 'var(--sap-shell-text)',
-        padding: '10px 24px', 
+        padding: '0 20px', 
+        height: '44px',
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        boxShadow: '0 1px 0 rgba(0,0,0,0.15)',
         zIndex: 1000
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {/* SAP Blue Logo Icon */}
             <div style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '4px',
+              width: '28px',
+              height: '28px',
+              borderRadius: '3px',
               backgroundColor: 'var(--sap-accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#ffffff',
-              fontWeight: 'bold',
-              fontSize: '14px'
+              fontWeight: '700',
+              fontSize: '15px',
+              letterSpacing: '-0.02em'
             }}>
               E
             </div>
             <span style={{ 
-              fontWeight: '700', 
-              fontSize: '16px', 
+              fontWeight: '600', 
+              fontSize: '15px', 
               color: '#ffffff',
               letterSpacing: '-0.01em'
             }}>
-              Experto<span style={{ color: '#5bb2ff', fontWeight: '500' }}>.ai</span>
+              Experto<span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: '400' }}>.ai</span>
             </span>
           </div>
-          <div style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255,255,255,0.2)' }}></div>
+          <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.15)' }}></div>
           <span style={{ 
             fontSize: '11px',
             fontFamily: 'var(--font-mono)', 
-            color: 'rgba(255,255,255,0.7)',
-            backgroundColor: 'rgba(255,255,255,0.1)',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontWeight: '500'
+            color: 'rgba(255,255,255,0.5)',
+            padding: '0',
+            fontWeight: '400'
           }}>
-            T-CODE: AUDIT_WORKSPACE
+            AUDIT_WORKSPACE
           </span>
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '13px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Workspace:</span>
-            <select 
-              value={currentView}
-              onChange={(e) => setCurrentView(e.target.value)}
-              style={{
-                fontWeight: '600', 
-                color: '#ffffff',
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                padding: '4px 10px',
-                borderRadius: '4px',
-                border: '1px solid rgba(255,255,255,0.3)',
-                cursor: 'pointer',
-                outline: 'none',
-                fontSize: '12px'
-              }}
-            >
-              {user?.role === 'admin' && <option value="dashboard" style={{ color: 'var(--sap-text-color)' }}>Admin Dashboard</option>}
-              <option value="upload" style={{ color: 'var(--sap-text-color)' }}>Document Ingestion</option>
-              <option value="chat" style={{ color: 'var(--sap-text-color)' }}>Audit Exception Control</option>
-            </select>
-          </div>
+          {user?.role === 'admin' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: 'rgba(255,255,255,0.7)' }}>Workspace:</span>
+              <select 
+                value={currentView}
+                onChange={(e) => setCurrentView(e.target.value)}
+                style={{
+                  fontWeight: '600', 
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  fontSize: '12px'
+                }}
+              >
+                <option value="dashboard" style={{ color: 'var(--sap-text-color)' }}>Admin Dashboard</option>
+                <option value="upload" style={{ color: 'var(--sap-text-color)' }}>Document Ingestion</option>
+                {currentView === 'chat' && (
+                  <option value="chat" style={{ color: 'var(--sap-text-color)' }} disabled>Audit Exception Control</option>
+                )}
+              </select>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#ffffff', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {currentView === 'upload' ? 'Document Ingestion' : 'Audit Exception Control'}
+              </span>
+            </div>
+          )}
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ 
@@ -133,18 +146,19 @@ function App() {
             style={{
               padding: '4px 12px',
               backgroundColor: 'transparent',
-              color: '#ffffff',
-              border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: '4px',
+              color: 'rgba(255,255,255,0.8)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '3px',
               fontSize: '12px',
-              fontWeight: '500',
+              fontWeight: '400',
               cursor: 'pointer',
-              transition: 'background-color 0.15s'
+              transition: 'background-color 0.15s',
+              fontFamily: 'var(--font-sans)'
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.08)'}
             onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
           >
-            Sign out
+            Sign Out
           </button>
         </div>
       </header>
@@ -156,8 +170,8 @@ function App() {
           display: 'flex', 
           flexDirection: 'column', 
           justifyContent: 'flex-start',
-          paddingTop: '24px',
-          paddingBottom: '48px',
+          paddingTop: '16px',
+          paddingBottom: '32px',
           width: '100%',
           maxWidth: '100%',
           alignItems: 'stretch'
@@ -169,7 +183,7 @@ function App() {
             <UploadWindow onConfirmed={handleMappingConfirmed} />
           )}
           {currentView === 'chat' && (
-            <ChatWindow />
+            <ChatWindow initialMode={uploadMode} onBackToUpload={() => setCurrentView('upload')} />
           )}
         </div>
       </main>

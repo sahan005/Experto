@@ -28,22 +28,25 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        invoice_id TEXT,
-        vendor_name TEXT,
-        vendor_id TEXT,
-        invoice_date TEXT,
-        due_date TEXT,
-        line_item_description TEXT,
-        quantity REAL,
-        unit_price REAL,
-        total_amount REAL,
-        currency TEXT,
-        tax_amount REAL,
-        discount REAL,
-        purchase_order_number TEXT,
-        payment_status TEXT,
-        department TEXT,
-        approver_name TEXT,
+        Invoice_ID TEXT,
+        Invoice_Date TEXT,
+        Due_Date TEXT,
+        Vendor_Name TEXT,
+        Vendor_GSTIN TEXT,
+        PO_Number TEXT,
+        Payment_Terms TEXT,
+        Line_No TEXT,
+        Line_Item_Description TEXT,
+        Qty REAL,
+        Unit_Price REAL,
+        Line_Amount REAL,
+        Subtotal REAL,
+        Discount REAL,
+        Tax REAL,
+        Shipping REAL,
+        Grand_Total REAL,
+        Bank_Account TEXT,
+        Invoice_Status TEXT,
         source_file TEXT,
         upload_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -60,13 +63,29 @@ def init_db():
     """)
 
     # Table 4: vendors
+    cursor.execute("DROP TABLE IF EXISTS vendors")
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS vendors (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        vendor_name TEXT UNIQUE NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active'
+        Vendor_ID TEXT PRIMARY KEY,
+        Vendor_Name TEXT UNIQUE NOT NULL,
+        GSTIN TEXT,
+        Bank_Account TEXT,
+        Payment_Terms TEXT,
+        Status TEXT NOT NULL DEFAULT 'Active'
     )
     """)
+
+    # Seed vendors
+    vendors_seeds = [
+        ("V001", "ABC Technologies Pvt Ltd", "19ABCDE1234F1Z5", "50200012345678", "Net 30", "Active"),
+        ("V002", "TechNova Solutions Pvt Ltd", "29AAACT5678L1Z2", "60210045678912", "Net 45", "Active"),
+        ("V003", "CloudSphere Software Pvt Ltd", "27AACCS9876R1Z4", "70220099887766", "Net 30", "Active")
+    ]
+    for v_id, v_name, gstin, bank, terms, status in vendors_seeds:
+        cursor.execute("""
+            INSERT OR REPLACE INTO vendors (Vendor_ID, Vendor_Name, GSTIN, Bank_Account, Payment_Terms, Status)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (v_id, v_name, gstin, bank, terms, status))
 
     # Table 5: category_rules
     cursor.execute("""
@@ -81,10 +100,10 @@ def init_db():
     
     # Seed canonical invoice field names into standard_schema
     canonical_fields = [
-        "invoice_id", "vendor_name", "vendor_id", "invoice_date", "due_date",
-        "line_item_description", "quantity", "unit_price", "total_amount",
-        "currency", "tax_amount", "discount", "purchase_order_number",
-        "payment_status", "department", "approver_name"
+        "Invoice_ID", "Invoice_Date", "Due_Date", "Vendor_Name", "Vendor_GSTIN", 
+        "PO_Number", "Payment_Terms", "Line_No", "Line_Item_Description", "Qty", 
+        "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", 
+        "Grand_Total", "Bank_Account", "Invoice_Status"
     ]
     
     for field in canonical_fields:

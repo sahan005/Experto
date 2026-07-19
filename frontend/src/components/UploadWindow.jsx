@@ -1,13 +1,21 @@
 import { useState, useRef, useEffect, useContext } from 'react';
-import { UploadCloud, CheckCircle2, FileText, ArrowRight, Trash2, Loader2, Database } from 'lucide-react';
+import { UploadCloud, CheckCircle2, FileText, ArrowRight, Trash2, Loader2, Database, AlertCircle } from 'lucide-react';
 import Papa from 'papaparse';
 import { AuthContext } from '../context/AuthContext';
 
 const API_URL = 'http://localhost:8081';
 
+const formatFieldName = (name) => {
+  if (!name) return "";
+  if (name === "Qty") return "Quantity";
+  return name.replace(/_/g, " ");
+};
+
 function UploadWindow({ onConfirmed }) {
   const { token, user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('csv');
+  const [uploadMode, setUploadMode] = useState('batch'); // 'batch' or 'single'
+    
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -16,6 +24,9 @@ function UploadWindow({ onConfirmed }) {
   const [standardFields, setStandardFields] = useState([]);
   const fileInputRef = useRef(null);
   const timeoutsRef = useRef([]);
+  
+  // Validation state for single invoice
+  const [validationResults, setValidationResults] = useState(null);
 
   useEffect(() => {
     fetch(`${API_URL}/api/standard_fields`)
@@ -62,7 +73,6 @@ function UploadWindow({ onConfirmed }) {
     setProgressPercent(100);
     setProgressStep(4);
     
-    // Brief delay so the user sees the completed checkmark and full bar
     setTimeout(() => {
       setLoading(false);
       callback();
@@ -70,11 +80,13 @@ function UploadWindow({ onConfirmed }) {
   };
 
   const handleFileChange = async (e) => {
+
+    
     const selected = e.target.files[0];
     if (!selected) return;
 
     if (selected.size > 20 * 1024 * 1024) {
-      alert('Error: File size exceeds the 20MB limit. Please upload a smaller file.');
+      alert('Error: File size exceeds the 20MB limit.');
       return;
     }
 
@@ -90,6 +102,42 @@ function UploadWindow({ onConfirmed }) {
       alert(`Invalid file type for the selected tab. Expected ${getAcceptType()}`);
       setFile(null);
     }
+  };
+  
+  const validateSingleInvoice = (rows) => {
+    if (!rows || rows.length === 0) return null;
+    
+    const firstRow = rows[0];
+    const poMatch = true;
+    const dateMatch = true;
+    
+    let hasNegative = false;
+    let hasMissing = false;
+    
+    const numCols = ["Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"];
+    const requiredCols = ["Invoice_ID", "Vendor_Name", "Line_Item_Description"];
+    
+    rows.forEach(r => {
+      numCols.forEach(col => {
+         if (r[col] !== undefined && r[col] !== null) {
+           const num = parseFloat(r[col]);
+           if (num < 0) hasNegative = true;
+         }
+      });
+      requiredCols.forEach(col => {
+         if (r[col] === undefined || r[col] === null || String(r[col]).trim() === "") {
+           hasMissing = true;
+         }
+      });
+    });
+    
+    return {
+       poMatch,
+       dateMatch,
+       hasNegative,
+       hasMissing,
+       vendorDetails: firstRow
+    };
   };
 
   const uploadCSV = async (file) => {
@@ -130,6 +178,7 @@ function UploadWindow({ onConfirmed }) {
           const headers = Array.from(allKeys);
           
           completeProgressSimulation(() => {
+            setValidationResults(uploadMode === 'single' ? validateSingleInvoice(structuredRows) : null);
             setPreview({
               filename: file.name,
               headers: headers,
@@ -172,6 +221,7 @@ function UploadWindow({ onConfirmed }) {
         const headers = Array.from(allKeys);
         
         completeProgressSimulation(() => {
+          setValidationResults(uploadMode === 'single' ? validateSingleInvoice(data.extracted_data) : null);
           setPreview({
             filename: data.filename,
             headers: headers,
@@ -206,7 +256,7 @@ function UploadWindow({ onConfirmed }) {
         body: JSON.stringify({ rows: rowsToInsert })
       });
       setLoading(false);
-      onConfirmed();
+      onConfirmed(uploadMode);
     } catch (err) {
       console.error(err);
       setLoading(false);
@@ -240,6 +290,7 @@ function UploadWindow({ onConfirmed }) {
   const resetUpload = () => {
     setFile(null);
     setPreview(null);
+    setValidationResults(null);
     clearProgressTimeouts();
   };
 
@@ -247,6 +298,8 @@ function UploadWindow({ onConfirmed }) {
     setActiveTab(tab);
     resetUpload();
   };
+  
+  const lineItemKeys = ["Line_No", "Line_Item_Description", "Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"];
 
   return (
     <div className="panel" style={{ maxWidth: '960px', width: '100%', margin: '0 auto' }}>
@@ -269,6 +322,17 @@ function UploadWindow({ onConfirmed }) {
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: '20px', alignItems: 'center', padding: '10px 24px', backgroundColor: '#f9f9fa', borderBottom: '1px solid var(--sap-border-color)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}>
+          <input type="radio" name="uploadMode" checked={uploadMode === 'batch'} onChange={() => { setUploadMode('batch'); resetUpload(); }} />
+          Batch Upload
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}>
+          <input type="radio" name="uploadMode" checked={uploadMode === 'single'} onChange={() => { setUploadMode('single'); resetUpload(); }} />
+          Single Invoice Validation
+        </label>
+      </div>
+      
       <div className="tabs">
         <button className={`tab ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => changeTab('csv')}>
           CSV Spreadsheet
@@ -280,6 +344,8 @@ function UploadWindow({ onConfirmed }) {
           Image Scan
         </button>
       </div>
+      
+
 
       {loading ? (
         <div className="progress-container">
@@ -361,7 +427,8 @@ function UploadWindow({ onConfirmed }) {
             backgroundColor: 'var(--sap-success-bg)', 
             padding: '12px 18px', 
             border: '1px solid var(--sap-success-border)', 
-            borderRadius: '8px' 
+            borderRadius: '4px',
+            margin: '16px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
@@ -387,39 +454,86 @@ function UploadWindow({ onConfirmed }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn" onClick={resetUpload} style={{ padding: '6px 12px', borderRadius: '6px' }}>
+              <button className="btn" onClick={resetUpload} style={{ padding: '6px 12px', borderRadius: '4px' }}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleConfirmDocument} style={{ padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button className="btn btn-primary" onClick={handleConfirmDocument} style={{ padding: '6px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 Post & Ingest Invoices <ArrowRight size={12} />
               </button>
             </div>
           </div>
           
-          <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--sap-text-color)' }}>Extracted Structured Schema Preview</h3>
-            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
-              The AI extraction engine mapped raw data fields into the unified ERP schema shown below. Verify details before posting.
-            </p>
-          </div>
+          {uploadMode === 'single' && validationResults && (
+            <div style={{ padding: '0 16px 16px 16px' }}>
+              <div style={{ border: '1px solid var(--sap-border-color)', borderRadius: '4px', backgroundColor: '#fff', overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--sap-border-color)', backgroundColor: '#f9f9fa', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <h3 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--sap-text-color)' }}>Vendor & Invoice Details</h3>
+                   <div style={{ display: 'flex', gap: '12px' }}>
+                     {validationResults.hasNegative && <span style={{ color: '#d32f2f', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={14}/> Contains Negative Values</span>}
+                     {validationResults.hasMissing && <span style={{ color: '#ed6c02', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={14}/> Missing Required Fields</span>}
+                   </div>
+                </div>
+                <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--sap-text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Vendor Name</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--sap-text-color)' }}>{validationResults.vendorDetails.Vendor_Name || 'Unknown'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--sap-text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Invoice ID</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--sap-text-color)' }}>{validationResults.vendorDetails.Invoice_ID || 'Unknown'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--sap-text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>PO Number</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--sap-text-color)' }}>{validationResults.vendorDetails.PO_Number || 'Missing'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--sap-text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Invoice Date</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--sap-text-color)' }}>{validationResults.vendorDetails.Invoice_Date || 'Missing'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--sap-text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Payment Terms</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--sap-text-color)' }}>{validationResults.vendorDetails.Payment_Terms || 'Missing'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--sap-text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Invoice Status</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--sap-text-color)' }}>{validationResults.vendorDetails.Invoice_Status || 'Pending'}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <h3 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--sap-text-color)', marginTop: '24px', marginBottom: '12px' }}>Line Items</h3>
+            </div>
+          )}
 
-          <div className="table-wrapper" style={{ maxHeight: '360px', overflow: 'auto' }}>
+          <div className="table-wrapper" style={{ maxHeight: '360px', overflow: 'auto', margin: '0 16px 16px 16px' }}>
             <table className="data-table" style={{ margin: 0 }}>
               <thead>
                 <tr style={{ position: 'sticky', top: 0, zIndex: 2 }}>
-                  {preview.headers.map((h, i) => (
-                    <th key={i}>{h}</th>
-                  ))}
+                  {uploadMode === 'single' 
+                    ? preview.headers.filter(h => lineItemKeys.includes(h)).map((h, i) => (
+                        <th key={i}>{formatFieldName(h)}</th>
+                      ))
+                    : preview.headers.map((h, i) => (
+                        <th key={i}>{formatFieldName(h)}</th>
+                      ))
+                  }
                 </tr>
               </thead>
               <tbody>
                 {preview.rows.map((row, i) => (
                   <tr key={i}>
-                    {preview.headers.map((h, j) => (
-                      <td key={j} style={{ fontFamily: (h.includes('amount') || h.includes('date') || h.includes('number') || h.includes('id')) ? 'var(--font-mono)' : 'inherit', fontSize: '12px' }}>
-                        {row[h] !== null && row[h] !== undefined ? String(row[h]) : ''}
-                      </td>
-                    ))}
+                    {uploadMode === 'single'
+                      ? preview.headers.filter(h => lineItemKeys.includes(h)).map((h, j) => (
+                          <td key={j} style={{ fontFamily: (h.includes('Amount') || h.includes('Qty') || h.includes('Total') || h.includes('Price')) ? 'var(--font-mono)' : 'inherit', fontSize: '12px' }}>
+                            {row[h] !== null && row[h] !== undefined ? String(row[h]) : ''}
+                          </td>
+                        ))
+                      : preview.headers.map((h, j) => (
+                          <td key={j} style={{ fontFamily: (h.includes('Amount') || h.includes('Date') || h.includes('ID') || h.includes('No')) ? 'var(--font-mono)' : 'inherit', fontSize: '12px' }}>
+                            {row[h] !== null && row[h] !== undefined ? String(row[h]) : ''}
+                          </td>
+                        ))
+                    }
                   </tr>
                 ))}
               </tbody>

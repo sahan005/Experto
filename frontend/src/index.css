@@ -1,20 +1,20 @@
 :root {
   /* SAP Fiori Horizon Color Palette (Morning Horizon Theme) */
-  --sap-bg: #f2f4f7;             /* Morning Horizon Light Gray-Blue Background */
+  --sap-bg: #f5f6f7;             /* S/4HANA Horizon Background */
   --sap-card-bg: #ffffff;        /* Fiori Card Tile Background */
-  --sap-shell-bg: #1c2d3d;       /* Fiori Dark Shell Header (Deep Blue-Gray) */
+  --sap-shell-bg: #354a5f;       /* S/4HANA Shell Bar */
   --sap-shell-text: #ffffff;     /* Shell Header Text Color */
   
   --sap-accent: #0a6ed1;         /* SAP Fiori Blue Accent */
   --sap-accent-hover: #0854a0;   /* Active/Hover SAP Blue */
   --sap-accent-light: #ebf5fc;   /* Light Blue Active Row Hover Highlight */
   
-  --sap-border: #d9d9d9;         /* Light Border Gray */
-  --sap-border-hover: #b3b3b3;   /* Border Gray Hover */
+  --sap-border: #e5e5e5;         /* Horizon Soft Border */
+  --sap-border-hover: #89919a;   /* Border Hover */
   
   --sap-text-color: #32363a;     /* SAP Charcoal Gray Primary Text */
-  --sap-text-muted: #6a6d70;     /* SAP Fiori Muted Gray Text */
-  --sap-text-light: #7f868c;     /* SAP Light Helper Text */
+  --sap-text-muted: #556b82;     /* SAP Blue-Gray Muted Text */
+  --sap-text-light: #8696a7;     /* SAP Light Helper Text */
   
   /* SAP Semantic Status Colors */
   --sap-success-text: #107e3e;   /* Green Success Text */
@@ -72,28 +72,28 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c0c0c0;
+  background: #c4c6c8;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a0a0a0;
+  background: #9a9ea1;
 }
 
 /* Page Layout Fluid Container */
 .container {
   max-width: 100%;
   margin: 0 auto;
-  padding: 24px 40px;
+  padding: 16px 32px;
 }
 
 /* SAP Fiori Tile Cards */
 .panel {
   background-color: var(--sap-card-bg);
   border: 1px solid var(--sap-border);
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  padding: 16px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.04);
   overflow: hidden;
   position: relative;
 }
@@ -122,12 +122,12 @@ h1, h2, h3, h4, h5, h6 {
   background-color: var(--sap-card-bg);
   color: var(--sap-accent);
   border: 1px solid var(--sap-accent);
-  padding: 8px 16px;
+  padding: 6px 14px;
   font-family: var(--font-sans);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 4px;
   outline: none;
   transition: all 0.15s ease-in-out;
 }
@@ -194,10 +194,10 @@ h1, h2, h3, h4, h5, h6 {
   background-color: var(--sap-card-bg);
   border: 1px solid var(--sap-border);
   color: var(--sap-text-color);
-  padding: 8px 12px;
+  padding: 7px 11px;
   font-family: var(--font-sans);
   font-size: 13px;
-  border-radius: 6px;
+  border-radius: 4px;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -218,21 +218,21 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0;
   border-bottom: 1px solid var(--sap-border);
   margin-bottom: 20px;
-  gap: 24px;
+  gap: 0;
   width: 100%;
 }
 
 .tab {
-  padding: 10px 4px;
+  padding: 10px 16px;
   background: transparent;
   border: none;
   color: var(--sap-text-muted);
   font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   border-radius: 0;
-  border-bottom: 3px solid transparent;
+  border-bottom: 2px solid transparent;
   transition: all 0.15s ease;
 }
 
@@ -249,7 +249,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* SAP Fiori Tables */
 .table-wrapper {
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid var(--sap-border);
   overflow: hidden;
   background-color: var(--sap-card-bg);
@@ -263,14 +263,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .data-table th, .data-table td {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--sap-border);
 }
 
 .data-table th {
-  background-color: #f2f4f7;
+  background-color: #f5f6f7;
   font-family: var(--font-sans);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--sap-text-color);
   font-size: 12px;
   text-transform: none;
@@ -291,7 +291,7 @@ h1, h2, h3, h4, h5, h6 {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 3px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
@@ -358,7 +358,7 @@ h1, h2, h3, h4, h5, h6 {
   border: 2px dashed var(--sap-border);
   padding: 36px 20px;
   text-align: center;
-  border-radius: 8px;
+  border-radius: 4px;
   background-color: #fafbfc;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -411,9 +411,9 @@ h1, h2, h3, h4, h5, h6 {
 .sidebar-card {
   background-color: var(--sap-card-bg);
   border: 1px solid var(--sap-border);
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  padding: 14px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.03);
 }
 
 .sidebar-card-title {
@@ -434,8 +434,8 @@ h1, h2, h3, h4, h5, h6 {
   flex-direction: column;
   background-color: var(--sap-card-bg);
   border: 1px solid var(--sap-border);
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.04);
   overflow: hidden;
   height: 100%;
 }
@@ -454,9 +454,9 @@ h1, h2, h3, h4, h5, h6 {
 .chat-message {
   max-width: 80%;
   padding: 14px 18px;
-  border-radius: 8px;
+  border-radius: 4px;
   line-height: 1.5;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  box-shadow: 0 1px 1px rgba(0,0,0,0.02);
   animation: slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   opacity: 0;
   transform: translateY(6px);
@@ -474,7 +474,7 @@ h1, h2, h3, h4, h5, h6 {
   background-color: var(--sap-card-bg);
   color: var(--sap-text-color);
   border: 1px solid var(--sap-border);
-  border-left: 4px solid var(--sap-accent);
+  border-left: 3px solid var(--sap-accent);
 }
 
 .chat-message-header {
@@ -501,8 +501,8 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Multi-step Upload Progress Bar (SAP Blue Theme) */
 .progress-container {
-  padding: 20px;
-  border-radius: 8px;
+  padding: 16px;
+  border-radius: 4px;
   background-color: #fafbfc;
   border: 1px solid var(--sap-border);
   margin: 12px 0;
@@ -600,15 +600,15 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   background-color: var(--sap-card-bg);
   border: 1px solid var(--sap-border);
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   min-height: 540px;
   animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .login-showcase-panel {
-  background: linear-gradient(145deg, #111d29 0%, #1c2d3d 100%);
+  background: linear-gradient(145deg, #1c2d3d 0%, #354a5f 100%);
   padding: 40px;
   color: #ffffff;
   display: flex;
@@ -671,7 +671,7 @@ h1, h2, h3, h4, h5, h6 {
   .login-split-container {
     grid-template-columns: 1fr;
     min-height: auto;
-    border-radius: 8px;
+    border-radius: 4px;
     max-width: 440px;
   }
   .login-showcase-panel {

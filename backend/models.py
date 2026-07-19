@@ -42,11 +42,11 @@ class ConfirmMappingRequest(BaseModel):
     rows: List[InvoiceDataRow]
 
 class OnboardingContext(BaseModel):
+    audit_mode: str = "batch" # "batch" or "single"
     expected_start_date: Optional[str] = None
     expected_end_date: Optional[str] = None
-    expected_currency: str
-    po_numbers_required: bool
-    expected_payment_status: str
+    expected_po_number: Optional[str] = None
+    expected_invoice_date: Optional[str] = None
 
 class ChatMessageRequest(BaseModel):
     message: str
@@ -72,3 +72,11 @@ class ValidatedQuery(BaseModel):
     is_valid: bool
     reason: Optional[str] = None
     filters: Optional[QueryFilters] = None
+
+class VendorCreate(BaseModel):
+    Vendor_ID: str
+    Vendor_Name: str
+    GSTIN: Optional[str] = ""
+    Bank_Account: Optional[str] = ""
+    Payment_Terms: Optional[str] = ""
+    Status: Optional[str] = "Active"

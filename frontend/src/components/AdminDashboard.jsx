@@ -14,6 +14,7 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [newRule, setNewRule] = useState({ category_name: '', min_price: '', max_price: '', expected_tax_rate: '' });
   const [newUser, setNewUser] = useState({ email: '', password: '' });
+  const [newVendor, setNewVendor] = useState({ Vendor_ID: '', Vendor_Name: '', GSTIN: '', Bank_Account: '', Payment_Terms: '', Status: 'Active' });
 
   const fetchDashboardData = async () => {
     try {
@@ -95,9 +96,9 @@ function AdminDashboard() {
   }, [token]);
 
   const toggleVendorStatus = async (vendor) => {
-    const newStatus = vendor.status === 'active' ? 'blocked' : 'active';
+    const newStatus = vendor.Status === 'Active' ? 'Blocked' : 'Active';
     try {
-      await fetch(`${API_URL}/api/admin/vendors/${encodeURIComponent(vendor.vendor_name)}/status`, {
+      await fetch(`${API_URL}/api/admin/vendors/${encodeURIComponent(vendor.Vendor_Name)}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -106,6 +107,49 @@ function AdminDashboard() {
         body: JSON.stringify({ status: newStatus })
       });
       fetchVendorsAndRules();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const addVendor = async (e) => {
+    e.preventDefault();
+    if (!newVendor.Vendor_ID || !newVendor.Vendor_Name) return;
+    try {
+      const response = await fetch(`${API_URL}/api/admin/vendors`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newVendor)
+      });
+      if (response.ok) {
+        setNewVendor({ Vendor_ID: '', Vendor_Name: '', GSTIN: '', Bank_Account: '', Payment_Terms: '', Status: 'Active' });
+        fetchVendorsAndRules();
+      } else {
+        const data = await response.json();
+        alert(data.detail || 'Failed to add vendor');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const deleteVendor = async (vendorId) => {
+    if (!window.confirm(`Are you sure you want to delete vendor ${vendorId}?`)) return;
+    try {
+      const response = await fetch(`${API_URL}/api/admin/vendors/${encodeURIComponent(vendorId)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        fetchVendorsAndRules();
+      } else {
+        alert('Failed to delete vendor');
+      }
     } catch (err) {
       console.error(err);
     }
@@ -217,7 +261,7 @@ function AdminDashboard() {
           <div style={{ 
             backgroundColor: 'var(--sap-accent-light)', 
             padding: '8px', 
-            borderRadius: '6px',
+            borderRadius: '4px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -226,7 +270,7 @@ function AdminDashboard() {
             <Activity size={20} style={{ color: 'var(--sap-accent)' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--sap-text-color)', letterSpacing: '-0.01em' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--sap-text-color)', letterSpacing: '-0.01em' }}>
               Executive Admin Dashboard
             </h1>
             <p style={{ color: 'var(--sap-text-muted)', fontSize: '13px', marginTop: '2px', fontWeight: '500' }}>
@@ -271,39 +315,39 @@ function AdminDashboard() {
 
       {/* KPI Stats Panel Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
-        <div className="panel" style={{ padding: '16px', borderRadius: '6px' }}>
+        <div className="panel" style={{ padding: '16px', borderRadius: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Total Invoices</span>
             <div style={{ color: 'var(--sap-accent)', backgroundColor: 'var(--sap-accent-light)', padding: '6px', borderRadius: '4px', border: '1px solid rgba(10, 110, 209, 0.1)' }}>
               <Database size={14} />
             </div>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--sap-text-color)', fontFamily: 'var(--font-mono)' }}>
+          <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--sap-text-color)', fontFamily: 'var(--font-mono)' }}>
             {dashboardData?.total_invoices || 0}
           </div>
         </div>
 
-        <div className="panel" style={{ padding: '16px', borderRadius: '6px' }}>
+        <div className="panel" style={{ padding: '16px', borderRadius: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Detected Anomalies</span>
             <div style={{ color: 'var(--sap-error-text)', backgroundColor: 'var(--sap-error-bg)', padding: '6px', borderRadius: '4px', border: '1px solid var(--sap-error-border)' }}>
               <ShieldAlert size={14} />
             </div>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--sap-error-text)', fontFamily: 'var(--font-mono)' }}>
+          <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--sap-error-text)', fontFamily: 'var(--font-mono)' }}>
             {dashboardData?.total_anomalies || 0}
           </div>
         </div>
 
-        <div className="panel" style={{ padding: '16px', borderRadius: '6px' }}>
+        <div className="panel" style={{ padding: '16px', borderRadius: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Active Vendors</span>
             <div style={{ color: 'var(--sap-success-text)', backgroundColor: 'var(--sap-success-bg)', padding: '6px', borderRadius: '4px', border: '1px solid var(--sap-success-border)' }}>
               <Shield size={14} />
             </div>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--sap-success-text)', fontFamily: 'var(--font-mono)' }}>
-            {vendors.filter(v => v.status === 'active').length} <span style={{ fontSize: '14px', color: 'var(--sap-text-muted)', fontWeight: '500' }}>/ {vendors.length}</span>
+          <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--sap-success-text)', fontFamily: 'var(--font-mono)' }}>
+            {vendors.filter(v => (v.Status || '').toLowerCase() === 'active').length} <span style={{ fontSize: '14px', color: 'var(--sap-text-muted)', fontWeight: '500' }}>/ {vendors.length}</span>
           </div>
         </div>
       </div>
@@ -311,7 +355,7 @@ function AdminDashboard() {
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
         {/* Daily Processed Spend Chart */}
-        <div className="panel" style={{ height: '360px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
+        <div className="panel" style={{ height: '360px', display: 'flex', flexDirection: 'column', borderRadius: '4px' }}>
           <div style={{ marginBottom: '16px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)' }}>Daily Processed Spend</h3>
             <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
@@ -343,7 +387,7 @@ function AdminDashboard() {
                   contentStyle={{ 
                     backgroundColor: 'var(--sap-card-bg)', 
                     border: '1px solid var(--sap-border)', 
-                    borderRadius: '6px',
+                    borderRadius: '4px',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
                     fontFamily: 'var(--font-sans)',
                     fontSize: '12px'
@@ -366,7 +410,7 @@ function AdminDashboard() {
         </div>
 
         {/* Daily Invoice Volume Chart */}
-        <div className="panel" style={{ height: '360px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
+        <div className="panel" style={{ height: '360px', display: 'flex', flexDirection: 'column', borderRadius: '4px' }}>
           <div style={{ marginBottom: '16px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)' }}>Daily Invoice Volume</h3>
             <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
@@ -398,7 +442,7 @@ function AdminDashboard() {
                   contentStyle={{ 
                     backgroundColor: 'var(--sap-card-bg)', 
                     border: '1px solid var(--sap-border)', 
-                    borderRadius: '6px',
+                    borderRadius: '4px',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
                     fontFamily: 'var(--font-sans)',
                     fontSize: '12px'
@@ -421,63 +465,140 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Spacious 3-Column Management Grid */}
+      {/* Vendor Master List (Full Width) */}
+      <div className="panel" style={{ display: 'flex', flexDirection: 'column', borderRadius: '4px', marginBottom: '24px', minHeight: '320px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Shield size={16} style={{ color: 'var(--sap-text-light)' }} />
+            Vendor Master List
+          </h3>
+          <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
+            Registered vendor profiles, tax registrations, banking details, and transaction status controls.
+          </p>
+        </div>
+        
+        <div className="table-wrapper" style={{ flex: 1, overflowY: 'auto' }}>
+          <table className="data-table" style={{ margin: 0 }}>
+            <thead>
+              <tr style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                <th>Vendor ID</th>
+                <th>Vendor Name</th>
+                <th>GSTIN</th>
+                <th>Bank Account</th>
+                <th>Payment Terms</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vendors.map(v => (
+                <tr key={v.Vendor_ID}>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{v.Vendor_ID}</td>
+                  <td style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>{v.Vendor_Name}</td>
+                  <td>{v.GSTIN}</td>
+                  <td>{v.Bank_Account}</td>
+                  <td>{v.Payment_Terms}</td>
+                  <td>
+                    {(v.Status || '').toLowerCase() === 'active' ? (
+                      <span className="badge badge-green">Active</span>
+                    ) : (
+                      <span className="badge badge-red">Blocked</span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button 
+                      onClick={() => toggleVendorStatus(v)}
+                      className={`btn ${(v.Status || '').toLowerCase() === 'active' ? 'btn-danger' : 'btn-primary'}`}
+                      style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '4px' }}
+                    >
+                      {(v.Status || '').toLowerCase() === 'active' ? 'Block' : 'Unblock'}
+                    </button>
+                    <button
+                      onClick={() => deleteVendor(v.Vendor_ID)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--sap-error-text)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px',
+                        transition: 'background-color 0.15s'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--sap-error-bg)'}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      title="Delete Vendor"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Quick Add Vendor Form */}
+        <form onSubmit={addVendor} style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '16px', borderTop: '1px solid var(--sap-border)', paddingTop: '16px' }}>
+          <input 
+            type="text" 
+            placeholder="Vendor ID (e.g. V004)" 
+            value={newVendor.Vendor_ID} 
+            onChange={e => setNewVendor({...newVendor, Vendor_ID: e.target.value})}
+            className="form-input"
+            style={{ width: '130px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
+            required
+          />
+          <input 
+            type="text" 
+            placeholder="Vendor Name" 
+            value={newVendor.Vendor_Name} 
+            onChange={e => setNewVendor({...newVendor, Vendor_Name: e.target.value})}
+            className="form-input"
+            style={{ flex: 1, minWidth: '150px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
+            required
+          />
+          <input 
+            type="text" 
+            placeholder="GSTIN" 
+            value={newVendor.GSTIN} 
+            onChange={e => setNewVendor({...newVendor, GSTIN: e.target.value})}
+            className="form-input"
+            style={{ width: '130px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
+          />
+          <input 
+            type="text" 
+            placeholder="Bank Account" 
+            value={newVendor.Bank_Account} 
+            onChange={e => setNewVendor({...newVendor, Bank_Account: e.target.value})}
+            className="form-input"
+            style={{ width: '150px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
+          />
+          <input 
+            type="text" 
+            placeholder="Payment Terms" 
+            value={newVendor.Payment_Terms} 
+            onChange={e => setNewVendor({...newVendor, Payment_Terms: e.target.value})}
+            className="form-input"
+            style={{ width: '110px', padding: '6px 10px', fontSize: '12px', height: '30px', borderRadius: '4px' }}
+          />
+          <button type="submit" className="btn btn-primary" style={{ padding: '0 12px', height: '30px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Plus size={14} /> Add Vendor
+          </button>
+        </form>
+      </div>
+
+      {/* Spacious 2-Column Management Grid */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', 
         gap: '24px',
         alignItems: 'start'
       }}>
-        {/* Column 1: Vendor Access Control */}
-        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
-          <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Shield size={16} style={{ color: 'var(--sap-text-light)' }} />
-              Vendor Access Control
-            </h3>
-            <p style={{ color: 'var(--sap-text-muted)', fontSize: '12px', marginTop: '2px' }}>
-              Block or authorize vendor invoice processing.
-            </p>
-          </div>
-          
-          <div className="table-wrapper" style={{ flex: 1, overflowY: 'auto' }}>
-            <table className="data-table" style={{ margin: 0 }}>
-              <thead>
-                <tr style={{ position: 'sticky', top: 0, zIndex: 2 }}>
-                  <th>Vendor</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendors.map(v => (
-                  <tr key={v.vendor_name}>
-                    <td style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>{v.vendor_name}</td>
-                    <td>
-                      {v.status === 'active' ? (
-                        <span className="badge badge-green">Active</span>
-                      ) : (
-                        <span className="badge badge-red">Blocked</span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button 
-                        onClick={() => toggleVendorStatus(v)}
-                        className={`btn ${v.status === 'active' ? 'btn-danger' : 'btn-primary'}`}
-                        style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '4px' }}
-                      >
-                        {v.status === 'active' ? 'Block' : 'Unblock'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Column 2: Category Compliance Rules */}
-        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
+        {/* Column 1: Category Compliance Rules */}
+        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '4px' }}>
           <div style={{ marginBottom: '16px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Settings size={16} style={{ color: 'var(--sap-text-light)' }} />
@@ -552,8 +673,8 @@ function AdminDashboard() {
           </form>
         </div>
 
-        {/* Column 3: User Management */}
-        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '6px' }}>
+        {/* Column 2: User Management */}
+        <div className="panel" style={{ height: '380px', display: 'flex', flexDirection: 'column', borderRadius: '4px' }}>
           <div style={{ marginBottom: '16px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--sap-text-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Users size={16} style={{ color: 'var(--sap-text-light)' }} />

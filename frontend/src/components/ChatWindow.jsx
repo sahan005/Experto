@@ -4,14 +4,14 @@ import { Send, Download, AlertCircle, RefreshCw, Settings, ShieldAlert, Calendar
 
 const API_URL = 'http://localhost:8081';
 
-function ChatWindow() {
+function ChatWindow({ initialMode, onBackToUpload }) {
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [context, setContext] = useState({
+    audit_mode: 'batch', // 'batch' or 'single'
     expected_start_date: '',
     expected_end_date: '',
-    expected_currency: 'USD',
-    po_numbers_required: true,
-    expected_payment_status: 'Unpaid'
+    expected_po_number: '',
+    expected_invoice_date: ''
   });
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -23,6 +23,15 @@ function ChatWindow() {
       chatHistoryEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (initialMode) {
+      setContext(prev => ({
+        ...prev,
+        audit_mode: initialMode
+      }));
+    }
+  }, [initialMode]);
 
   const chatMutation = useMutation({
     mutationFn: async ({ message, context, history }) => {
@@ -172,136 +181,48 @@ function ChatWindow() {
         </div>
         
         <form onSubmit={handleOnboardingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Section 1: Date Criteria */}
-          <div style={{ 
-            border: '1px solid var(--sap-border)', 
-            padding: '16px', 
-            backgroundColor: '#f8fafc', 
-            borderRadius: '6px' 
-          }}>
-            <h3 style={{ 
-              fontSize: '11px', 
-              fontWeight: '700', 
-              color: 'var(--sap-text-muted)', 
-              textTransform: 'uppercase', 
-              letterSpacing: '0.05em',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}>
-              <Calendar size={12} /> Date Interval Criteria
-            </h3>
-            <div style={{ display: 'flex', gap: '14px' }}>
-              <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                <label className="form-label">Posting Start Date</label>
-                <input 
-                  type="date" 
-                  className="form-input" 
-                  value={context.expected_start_date} 
-                  onChange={e => setContext({...context, expected_start_date: e.target.value})} 
-                />
-              </div>
-              <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                <label className="form-label">Posting End Date</label>
-                <input 
-                  type="date" 
-                  className="form-input" 
-                  value={context.expected_end_date} 
-                  onChange={e => setContext({...context, expected_end_date: e.target.value})} 
-                />
-              </div>
-            </div>
-          </div>
+          
 
-          {/* Section 2: Currency & Rules */}
-          <div style={{ 
-            border: '1px solid var(--sap-border)', 
-            padding: '16px', 
-            backgroundColor: '#f8fafc', 
-            borderRadius: '6px' 
-          }}>
-            <h3 style={{ 
-              fontSize: '11px', 
-              fontWeight: '700', 
-              color: 'var(--sap-text-muted)', 
-              textTransform: 'uppercase', 
-              letterSpacing: '0.05em',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}>
-              <DollarSign size={12} /> Document Control Criteria
-            </h3>
-            <div style={{ display: 'flex', gap: '14px', flexDirection: 'column' }}>
+
+          {context.audit_mode === 'batch' ? (
+            <div style={{ border: '1px solid var(--sap-border)', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '4px' }}>
+              <h3 style={{ fontSize: '11px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Calendar size={12} /> Batch Date Interval Criteria
+              </h3>
               <div style={{ display: 'flex', gap: '14px' }}>
                 <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label className="form-label">Expected ISO Currency</label>
-                  <select 
-                    className="form-select" 
-                    value={context.expected_currency} 
-                    onChange={e => setContext({...context, expected_currency: e.target.value})} 
-                    required
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="INR">INR (₹)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="CAD">CAD (C$)</option>
-                    <option value="AUD">AUD (A$)</option>
-                    <option value="JPY">JPY (¥)</option>
-                  </select>
+                  <label className="form-label">Posting Start Date</label>
+                  <input type="date" className="form-input" value={context.expected_start_date} onChange={e => setContext({...context, expected_start_date: e.target.value})} />
                 </div>
-                
                 <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label className="form-label">Expected Payment Status</label>
-                  <select 
-                    className="form-select" 
-                    value={context.expected_payment_status} 
-                    onChange={e => setContext({...context, expected_payment_status: e.target.value})} 
-                    required
-                  >
-                    <option value="Paid">Paid</option>
-                    <option value="Unpaid">Unpaid</option>
-                    <option value="Pending">Pending</option>
-                  </select>
+                  <label className="form-label">Posting End Date</label>
+                  <input type="date" className="form-input" value={context.expected_end_date} onChange={e => setContext({...context, expected_end_date: e.target.value})} />
                 </div>
-              </div>
-
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '10px', 
-                backgroundColor: '#ffffff',
-                border: '1px solid var(--sap-border)',
-                padding: '10px 14px',
-                borderRadius: '6px',
-                cursor: 'pointer'
-              }} onClick={() => setContext({...context, po_numbers_required: !context.po_numbers_required})}>
-                <input 
-                  type="checkbox" 
-                  id="poRequiredCheckbox" 
-                  checked={context.po_numbers_required} 
-                  onChange={e => setContext({...context, po_numbers_required: e.target.checked})} 
-                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--sap-accent)' }}
-                />
-                <label 
-                  htmlFor="poRequiredCheckbox" 
-                  className="form-label" 
-                  style={{ marginBottom: 0, cursor: 'pointer', fontWeight: '600', color: 'var(--sap-text-color)' }}
-                >
-                  Require Purchase Order (PO Number)
-                </label>
               </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ border: '1px solid var(--sap-border)', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '4px' }}>
+              <h3 style={{ fontSize: '11px', fontWeight: '700', color: 'var(--sap-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckSquare size={12} /> Single Invoice Expected Values
+              </h3>
+              <div style={{ display: 'flex', gap: '14px' }}>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label className="form-label">Expected PO Number</label>
+                  <input type="text" className="form-input" placeholder="e.g. PO-2023-441" value={context.expected_po_number} onChange={e => setContext({...context, expected_po_number: e.target.value})} />
+                </div>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label className="form-label">Expected Invoice Date</label>
+                  <input type="date" className="form-input" value={context.expected_invoice_date} onChange={e => setContext({...context, expected_invoice_date: e.target.value})} />
+                </div>
+              </div>
+            </div>
+          )}
 
           <button 
             type="submit" 
             className="btn btn-primary" 
             disabled={chatMutation.isPending} 
-            style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13px', borderRadius: '6px' }}
+            style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13px', borderRadius: '4px' }}
           >
             {chatMutation.isPending ? (
               <>
@@ -331,37 +252,54 @@ function ChatWindow() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
             <div style={{ borderBottom: '1px dashed var(--sap-border)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>DATE RANGE</span>
-              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
-                {context.expected_start_date || 'Any'} to {context.expected_end_date || 'Any'}
-              </span>
-            </div>
-            <div style={{ borderBottom: '1px dashed var(--sap-border)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>ISO CURRENCY</span>
-              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)', fontFamily: 'var(--font-mono)' }}>
-                {context.expected_currency}
-              </span>
-            </div>
-            <div style={{ borderBottom: '1px dashed var(--sap-border)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>PAYMENT STATUS</span>
-              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
-                {context.expected_payment_status}
-              </span>
-            </div>
-            <div>
-              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>PO REQUIRED</span>
-              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
-                {context.po_numbers_required ? 'Yes' : 'No'}
+              <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>AUDIT MODE</span>
+              <span style={{ fontWeight: '600', color: 'var(--sap-text-color)', textTransform: 'uppercase' }}>
+                {context.audit_mode}
               </span>
             </div>
             
-            <button 
-              className="btn" 
-              style={{ width: '100%', padding: '6px', fontSize: '11px', marginTop: '6px', borderRadius: '4px' }} 
-              onClick={() => setOnboardingComplete(false)}
-            >
-              Adjust Parameters
-            </button>
+            {context.audit_mode === 'batch' ? (
+              <div style={{ paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>DATE RANGE</span>
+                <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
+                  {context.expected_start_date || 'Any'} to {context.expected_end_date || 'Any'}
+                </span>
+              </div>
+            ) : (
+              <>
+                <div style={{ borderBottom: '1px dashed var(--sap-border)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>EXPECTED PO</span>
+                  <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
+                    {context.expected_po_number || 'None'}
+                  </span>
+                </div>
+                <div style={{ paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--sap-text-light)', display: 'block', fontSize: '11px', fontWeight: '600' }}>EXPECTED DATE</span>
+                  <span style={{ fontWeight: '600', color: 'var(--sap-text-color)' }}>
+                    {context.expected_invoice_date || 'None'}
+                  </span>
+                </div>
+              </>
+            )}
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+              <button 
+                className="btn" 
+                style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px' }} 
+                onClick={() => setOnboardingComplete(false)}
+              >
+                Adjust Parameters
+              </button>
+              {onBackToUpload && (
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--sap-border)' }} 
+                  onClick={onBackToUpload}
+                >
+                  ← Ingest New Invoices
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -380,7 +318,7 @@ function ChatWindow() {
             {latestAnomalyCount !== null ? (
               latestAnomalyCount > 0 ? (
                 <div>
-                  <span style={{ fontSize: '22px', fontWeight: '800', color: 'var(--sap-error-text)', fontFamily: 'var(--font-mono)' }}>
+                  <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--sap-error-text)', fontFamily: 'var(--font-mono)' }}>
                     {latestAnomalyCount}
                   </span>
                   <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--sap-text-color)', marginLeft: '6px' }}>
@@ -441,8 +379,8 @@ function ChatWindow() {
               Diagnostic Inquiry Channel
             </h3>
           </div>
-          <span className="badge badge-gray" style={{ fontSize: '10px' }}>
-            Channel: ID_{String(context.expected_currency).toUpperCase()}
+          <span className="badge badge-gray" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
+            Mode: {context.audit_mode} AUDIT
           </span>
         </div>
 
@@ -528,12 +466,12 @@ function ChatWindow() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={chatMutation.isPending}
-            style={{ height: '38px', fontSize: '13px', borderRadius: '6px' }}
+            style={{ height: '38px', fontSize: '13px', borderRadius: '4px' }}
           />
           <button 
             type="submit" 
             className="btn btn-primary" 
-            style={{ padding: '0 20px', height: '38px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }} 
+            style={{ padding: '0 20px', height: '38px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }} 
             disabled={chatMutation.isPending || !input.trim()}
           >
             <Send size={14} /> Run Query

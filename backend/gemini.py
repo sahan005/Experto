@@ -83,7 +83,7 @@ async def validate_and_parse_query(user_message: str) -> dict:
         "You are an AI that validates and parses user queries about invoice anomalies into structured database filters.\n"
         "If the query is completely unrelated to invoices, anomalies, vendors, or finance, set 'is_valid' to false and provide a 'reason'.\n"
         "Otherwise, set 'is_valid' to true, and extract any specific filters mentioned in the query into the 'filters' object.\n"
-        "The 'categories' array should contain one or more of: ['po_number', 'currency', 'duplicate', 'vendor_name', 'date', 'amount', 'payment_status', 'missing_value', 'negative_value', 'all'].\n"
+        "The 'categories' array should contain one or more of: ['po_number', 'duplicate', 'vendor_name', 'date', 'amount', 'payment_status', 'missing_value', 'negative_value', 'all'].\n"
         "Only include specific filter values (like vendor_name, min_amount, max_amount, start_date, end_date, payment_status) if explicitly mentioned. Dates should be in YYYY-MM-DD format.\n"
         "Return ONLY a JSON object matching this exact structure:\n"
         "{\n"
@@ -111,23 +111,25 @@ async def validate_and_parse_query(user_message: str) -> dict:
 async def narrate_anomalies_via_gemini(query_results: list[dict], user_message: str, context: dict, history: list[dict]):
     system_instruction = (
         "You are an AI assistant for a finance team, specializing in invoice anomaly detection. "
-        "You are analyzing a single, specific invoice that was just uploaded. "
         "You are provided with a user's query, context about expected invoice parameters, "
-        "and a pre-filtered list of raw JSON data representing the anomalies found in this specific invoice (or duplicate alerts). "
-        "Your task is to narrate these findings clearly in plain English, grouped logically. "
-        "Be concise, professional, and focus on the anomalies. DO NOT output markdown code blocks."
+        "and a list of raw JSON database anomalies. "
+        "Your task is to answer the user's query. IMPORTANT: Focus your answer strictly on addressing the user's specific question. "
+        "Do NOT mention or list other unrelated anomalies from the results if they do not relate to the user's question. "
+        "For example, if the user asks about a PO number issue, do not bring up date mismatches or pricing issues. "
+        "IMPORTANT: When describing database column names, format them in human-readable plain English with spaces instead of underscores (e.g. write 'Invoice ID' instead of 'Invoice_ID', 'Due Date' instead of 'Due_Date', 'Payment Terms' instead of 'Payment_Terms', 'Grand Total' instead of 'Grand_Total', etc.). Do not show raw underscore names to the user. "
+        "Be concise, direct, and professional. DO NOT output markdown code blocks."
     )
     
     prompt = (
         f"Context:\n"
+        f"Audit Mode: {context.get('audit_mode')}\n"
         f"Expected Start Date: {context.get('expected_start_date')}\n"
         f"Expected End Date: {context.get('expected_end_date')}\n"
-        f"Expected Currency: {context.get('expected_currency')}\n"
-        f"PO Numbers Required: {context.get('po_numbers_required')}\n"
-        f"Expected Payment Status: {context.get('expected_payment_status')}\n\n"
+        f"Expected PO Number: {context.get('expected_po_number')}\n"
+        f"Expected Invoice Date: {context.get('expected_invoice_date')}\n\n"
         f"User Message: {user_message}\n\n"
         f"Raw Database Anomaly Results:\n{json.dumps(query_results, indent=2)}\n\n"
-        "Please provide a plain English narration of these anomalies."
+        "Please answer the user's query directly based on the database results, focusing only on the topics they asked about."
     )
     
     return await call_gemini(system_instruction, prompt, temperature=0.2, json_mode=False)
