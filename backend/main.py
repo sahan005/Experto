@@ -574,7 +574,7 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
     cursor = conn.cursor()
     
     # Fetch blocked vendors
-    cursor.execute("SELECT Vendor_Name FROM vendors WHERE status = 'blocked'")
+    cursor.execute("SELECT Vendor_Name FROM vendors WHERE Status = 'Blocked'")
     blocked_vendors = {r["Vendor_Name"] for r in cursor.fetchall()}
     
     # Fetch category pricing rules
@@ -600,10 +600,10 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
             pass
 
     columns = [
-        "Invoice_ID", "Vendor_Name", "Vendor_GSTIN", "Invoice_Date", "Due_Date",
-        "Line_Item_Description", "Qty", "Unit_Price", "Line_Amount",
-        "currency", "Tax", "Discount", "PO_Number",
-        "Invoice_Status", "Bank_Account", "approver_name"
+        "Invoice_ID", "Invoice_Date", "Due_Date", "Vendor_Name", "Vendor_GSTIN", 
+        "PO_Number", "Payment_Terms", "Line_No", "Line_Item_Description", "Qty", 
+        "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", 
+        "Grand_Total", "Bank_Account", "Invoice_Status"
     ]
     
     output = io.StringIO()
