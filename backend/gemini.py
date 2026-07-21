@@ -158,3 +158,83 @@ async def extract_invoice_data_via_gemini(file_base64: str, mime_type: str, stan
     except Exception as e:
         print(f"Error parsing Gemini response for document extraction: {e}")
         return []
+
+async def determine_query_type(user_message: str) -> str:
+    system_instruction = (
+        "You are an AI assistant that classifies user requests into one of two categories:\n"
+        "1. 'anomaly_check': If the user is asking to scan for, list, check, or audit anomalies, duplicates, errors, missing values, or negative values on a file or current invoice.\n"
+        "2. 'general_question': If the user is asking a general question about the database records, vendors, rules, or users (e.g., counts, sums, pending invoices, top vendors, specific values, averages, status checks, list of invoices/vendors).\n"
+        "Return ONLY a JSON object with a single key 'type' whose value is either 'anomaly_check' or 'general_question'."
+    )
+    prompt = f"User message: '{user_message}'"
+    result_text = await call_gemini(system_instruction, prompt, temperature=0.1, json_mode=True)
+    try:
+        data = json.loads(result_text)
+        return data.get("type", "anomaly_check")
+    except Exception:
+        return "anomaly_check"
+
+async def generate_sqlite_query(user_question: str) -> str:
+    system_instruction = (
+        "You are an expert SQLite developer. Your job is to translate a user's natural language question into a single, valid, read-only SQLite SELECT query.\n"
+        "Do NOT write any INSERT, UPDATE, DELETE, or DROP statements.\n"
+        "The database schema is as follows:\n"
+        "Table 'invoices':\n"
+        "  - Invoice_ID (TEXT)\n"
+        "  - Invoice_Date (TEXT, YYYY-MM-DD)\n"
+        "  - Due_Date (TEXT, YYYY-MM-DD)\n"
+        "  - Vendor_Name (TEXT)\n"
+        "  - Vendor_GSTIN (TEXT)\n"
+        "  - PO_Number (TEXT)\n"
+        "  - Payment_Terms (TEXT)\n"
+        "  - Line_No (TEXT)\n"
+        "  - Line_Item_Description (TEXT)\n"
+        "  - Qty (REAL)\n"
+        "  - Unit_Price (REAL)\n"
+        "  - Line_Amount (REAL)\n"
+        "  - Subtotal (REAL)\n"
+        "  - Discount (REAL)\n"
+        "  - Tax (REAL)\n"
+        "  - Shipping (REAL)\n"
+        "  - Grand_Total (REAL)\n"
+        "  - Bank_Account (TEXT)\n"
+        "  - Invoice_Status (TEXT - e.g., 'Pending', 'Paid', 'Approved')\n"
+        "  - source_file (TEXT)\n"
+        "  - upload_timestamp (DATETIME)\n"
+        "Table 'vendors':\n"
+        "  - Vendor_ID (TEXT)\n"
+        "  - Vendor_Name (TEXT UNIQUE)\n"
+        "  - GSTIN (TEXT)\n"
+        "  - Bank_Account (TEXT)\n"
+        "  - Payment_Terms (TEXT)\n"
+        "  - Status (TEXT NOT NULL, 'Active' or 'Blocked')\n"
+        "Table 'category_rules':\n"
+        "  - category_name (TEXT UNIQUE)\n"
+        "  - min_price (REAL)\n"
+        "  - max_price (REAL)\n"
+        "  - expected_tax_rate (REAL)\n\n"
+        "Return ONLY a JSON object with a single key 'sql' containing the SQLite SELECT statement. Do not wrap it in markdown code fences."
+    )
+    prompt = f"User question: '{user_question}'\n\nReturn ONLY the JSON object."
+    result_text = await call_gemini(system_instruction, prompt, temperature=0.1, json_mode=True)
+    try:
+        data = json.loads(result_text)
+        return data.get("sql", "")
+    except Exception:
+        return ""
+
+async def answer_question_with_results(user_question: str, query_results: list, sql_query: str) -> str:
+    system_instruction = (
+        "You are an AI assistant specialized in corporate finance and invoice processing. "
+        "Your task is to answer the user's question using the provided database query results in a friendly, professional, plain English manner. "
+        "Do NOT mention SQL query, SQLite, database tables, or internal column names unless asked. "
+        "Be concise, direct, and helpful. "
+        "DO NOT output markdown code blocks."
+    )
+    prompt = (
+        f"User Question: '{user_question}'\n\n"
+        f"SQL Query Executed: {sql_query}\n\n"
+        f"Database Results (JSON list): {json.dumps(query_results)}\n\n"
+        "Please provide the final answer based on the query results."
+    )
+    return await call_gemini(system_instruction, prompt, temperature=0.2, json_mode=False)

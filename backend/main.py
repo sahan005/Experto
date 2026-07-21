@@ -86,7 +86,11 @@ async def get_admin_user(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return current_user
 from database import init_db, get_db
-from gemini import map_columns_via_gemini, narrate_anomalies_via_gemini, validate_and_parse_query, extract_invoice_data_via_gemini
+from gemini import (
+    map_columns_via_gemini, narrate_anomalies_via_gemini, validate_and_parse_query, 
+    extract_invoice_data_via_gemini, determine_query_type, generate_sqlite_query, 
+    answer_question_with_results
+)
 
 
 app = FastAPI(title="Invoice Anomaly Detection API")
@@ -753,6 +757,31 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
 async def chat(request: ChatMessageRequest):
     msg_lower = request.message.lower()
     is_general_scan = any(kw in msg_lower for kw in ["initial", "scan", "perform", "all", "anomal"])
+    
+    if not is_general_scan:
+        q_type = await determine_query_type(request.message)
+        if q_type == "general_question":
+            sql_query = await generate_sqlite_query(request.message)
+            if sql_query:
+                conn = get_db()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute(sql_query)
+                    rows = cursor.fetchall()
+                    results = [dict(r) for r in rows]
+                    conn.close()
+                    
+                    narration = await answer_question_with_results(request.message, results, sql_query)
+                    return ChatMessageResponse(
+                        response=narration,
+                        anomaly_count=0
+                    )
+                except Exception as e:
+                    print(f"Failed executing generated SQL: {e}")
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
     
     if is_general_scan:
         filters = {}
