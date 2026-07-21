@@ -28,6 +28,27 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
+def parse_float(val: Any) -> Any:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if not s:
+        return None
+    is_negative = False
+    if s.startswith("(") and s.endswith(")"):
+        is_negative = True
+        s = s[1:-1]
+    s = re.sub(r"[^\d.-]", "", s)
+    if not s or s == "-":
+        return None
+    try:
+        num = float(s)
+        return -num if is_negative else num
+    except ValueError:
+        return None
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -132,29 +153,61 @@ async def get_dashboard_metrics(admin: dict = Depends(get_admin_user)):
     conn = get_db()
     cursor = conn.cursor()
     
-    # Simple metrics
-    cursor.execute("SELECT COUNT(DISTINCT source_file) as total_invoices FROM invoices")
+    # Simple metrics excluding duplicates (where the same Invoice_ID exists in an earlier file)
+    cursor.execute("""
+        SELECT COUNT(DISTINCT source_file) as total_invoices 
+        FROM invoices i
+        WHERE i.Invoice_ID IS NULL OR i.Invoice_ID = '' OR i.source_file = (
+            SELECT source_file FROM invoices i2 WHERE i2.Invoice_ID = i.Invoice_ID ORDER BY i2.id ASC LIMIT 1
+        )
+    """)
     total_invoices = cursor.fetchone()["total_invoices"]
     
-    cursor.execute("SELECT SUM(Line_Amount) as total_spend FROM invoices")
+    cursor.execute("""
+        SELECT SUM(i.Line_Amount) as total_spend 
+        FROM invoices i
+        WHERE i.Invoice_ID IS NULL OR i.Invoice_ID = '' OR i.source_file = (
+            SELECT source_file FROM invoices i2 WHERE i2.Invoice_ID = i.Invoice_ID ORDER BY i2.id ASC LIMIT 1
+        )
+    """)
     total_spend = cursor.fetchone()["total_spend"] or 0
     
-    cursor.execute("SELECT Bank_Account, SUM(Line_Amount) as spend FROM invoices GROUP BY Bank_Account")
+    cursor.execute("""
+        SELECT i.Bank_Account, SUM(i.Line_Amount) as spend 
+        FROM invoices i
+        WHERE i.Invoice_ID IS NULL OR i.Invoice_ID = '' OR i.source_file = (
+            SELECT source_file FROM invoices i2 WHERE i2.Invoice_ID = i.Invoice_ID ORDER BY i2.id ASC LIMIT 1
+        )
+        GROUP BY i.Bank_Account
+    """)
     spend_by_dept = [dict(row) for row in cursor.fetchall()]
     
-    cursor.execute("SELECT Vendor_Name, COUNT(*) as count FROM invoices GROUP BY Vendor_Name ORDER BY count DESC LIMIT 5")
+    cursor.execute("""
+        SELECT i.Vendor_Name, COUNT(*) as count 
+        FROM invoices i
+        WHERE i.Invoice_ID IS NULL OR i.Invoice_ID = '' OR i.source_file = (
+            SELECT source_file FROM invoices i2 WHERE i2.Invoice_ID = i.Invoice_ID ORDER BY i2.id ASC LIMIT 1
+        )
+        GROUP BY i.Vendor_Name 
+        ORDER BY count DESC 
+        LIMIT 5
+    """)
     top_vendors = [dict(row) for row in cursor.fetchall()]
 
-    # Daily processing volume (grouped by upload/processing date)
+    # Daily processing volume (grouped by upload/processing date) excluding duplicates
     cursor.execute("""
         SELECT 
-            DATE(upload_timestamp) as date, 
-            SUM(Line_Amount) as amount, 
-            COUNT(DISTINCT source_file) as count
-        FROM invoices 
-        WHERE upload_timestamp IS NOT NULL
-        GROUP BY DATE(upload_timestamp)
-        ORDER BY DATE(upload_timestamp) ASC
+            DATE(i.upload_timestamp) as date, 
+            SUM(i.Line_Amount) as amount, 
+            COUNT(DISTINCT i.source_file) as count
+        FROM invoices i 
+        WHERE i.upload_timestamp IS NOT NULL AND (
+            i.Invoice_ID IS NULL OR i.Invoice_ID = '' OR i.source_file = (
+                SELECT source_file FROM invoices i2 WHERE i2.Invoice_ID = i.Invoice_ID ORDER BY i2.id ASC LIMIT 1
+            )
+        )
+        GROUP BY DATE(i.upload_timestamp)
+        ORDER BY DATE(i.upload_timestamp) ASC
     """)
     daily_totals = [dict(row) for row in cursor.fetchall()]
 
@@ -641,17 +694,12 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
             
             # If not missing, check other conditions
             else:
-                # 2. Unexpected Currency
-                if False:
-                    if val_str.strip() != context.expected_currency:
-                        anomalies.append(f"Unexpected Currency (Expected {context.expected_currency})")
-                
-                # 3. Duplicate Invoice ID
-                elif col == "Invoice_ID" and is_duplicate:
+                # 2. Duplicate Invoice ID
+                if col == "Invoice_ID" and is_duplicate:
                     anomalies.append("Duplicate Invoice ID")
                 
-                # 4. Out of Date Range / Invalid Date
-                elif col in ["Invoice_Date", "Due_Date"]:
+                # 3. Out of Date Range / Invalid Date
+                if col in ["Invoice_Date", "Due_Date"]:
                     try:
                         dt = datetime.strptime(val_str.strip(), "%Y-%m-%d")
                         if col == "Invoice_Date":
@@ -660,36 +708,30 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
                     except ValueError:
                         anomalies.append("Invalid Date Format")
                 
-                # 5. Unexpected Payment Status (Removed)
-                elif False:
-                    pass
-                
-                # 6. Negative Values
-                elif col in ["Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"]:
-                    try:
-                        num_val = float(val)
+                # 4. Negative and Zero Values
+                if col in ["Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"]:
+                    num_val = parse_float(val)
+                    if num_val is not None:
                         if num_val < 0:
                             anomalies.append("Negative Value")
-                    except ValueError:
-                        pass
+                        elif num_val == 0 and col in ["Qty", "Unit_Price", "Line_Amount"]:
+                            anomalies.append("Zero Value")
                 
-                # 7. Blocked Vendor
-                elif col == "Vendor_Name" and val_str in blocked_vendors:
+                # 5. Blocked Vendor
+                if col == "Vendor_Name" and val_str in blocked_vendors:
                     anomalies.append("Vendor Suspended")
                 
-                # 8. Category Pricing Rules
-                elif col == "Unit_Price":
+                # 6. Category Pricing Rules
+                if col == "Unit_Price":
                     desc = row.get("Line_Item_Description")
                     if desc and desc in category_rules:
                         rule = category_rules[desc]
-                        try:
-                            p = float(val)
+                        p = parse_float(val)
+                        if p is not None:
                             if rule["min_price"] is not None and p < rule["min_price"]:
                                 anomalies.append(f"Price below limit ({rule['min_price']})")
                             if rule["max_price"] is not None and p > rule["max_price"]:
                                 anomalies.append(f"Price exceeds limit ({rule['max_price']})")
-                        except ValueError:
-                            pass
             
             # Format the output value
             if anomalies:
@@ -709,15 +751,24 @@ def generate_highlighted_csv(current_file: str, context, conn) -> str:
 
 @app.post("/api/chat", response_model=ChatMessageResponse)
 async def chat(request: ChatMessageRequest):
-    validation_result = await validate_and_parse_query(request.message)
-    if not validation_result.get("is_valid", False):
-        return ChatMessageResponse(
-            response=f"I couldn't process your request: {validation_result.get('reason', 'Invalid query or unrelated topic.')}",
-            anomaly_count=0
-        )
-        
-    filters = validation_result.get("filters", {})
-    categories = filters.get("categories", ["all"])
+    msg_lower = request.message.lower()
+    is_general_scan = any(kw in msg_lower for kw in ["initial", "scan", "perform", "all", "anomal"])
+    
+    if is_general_scan:
+        filters = {}
+        categories = ["all"]
+    else:
+        validation_result = await validate_and_parse_query(request.message)
+        if not validation_result.get("is_valid", False):
+            return ChatMessageResponse(
+                response=f"I couldn't process your request: {validation_result.get('reason', 'Invalid query or unrelated topic.')}",
+                anomaly_count=0
+            )
+            
+        filters = validation_result.get("filters", {})
+        categories = filters.get("categories", ["all"])
+        if not categories:
+            categories = ["all"]
     
     conn = get_db()
     cursor = conn.cursor()
@@ -926,8 +977,8 @@ async def chat(request: ChatMessageRequest):
                             "description": f"Field '{format_field_name(col)}' is missing or null"
                         })
 
-    # 7. Negative Values
-    if "all" in categories or "negative_value" in categories:
+    # 7. Negative and Zero Values
+    if "all" in categories or "negative_value" in categories or "zero_value" in categories:
         seen_negatives = set()
         for row in all_rows:
             inv_id = row["Invoice_ID"] or "Unknown"
@@ -935,23 +986,32 @@ async def chat(request: ChatMessageRequest):
             
             for col in ["Qty", "Unit_Price", "Line_Amount", "Subtotal", "Discount", "Tax", "Shipping", "Grand_Total"]:
                 val = row[col]
-                if val is not None:
-                    try:
-                        num_val = float(val)
-                        if num_val < 0:
-                            key = (inv_id, vendor, col, num_val)
-                            if key not in seen_negatives:
-                                seen_negatives.add(key)
-                                anomalies.append({
-                                    "type": "Negative Value",
-                                    "Invoice_ID": inv_id,
-                                    "Vendor_Name": vendor,
-                                    "column": col,
-                                    "value": num_val,
-                                    "description": f"Field '{format_field_name(col)}' has a negative value ({num_val})"
-                                })
-                    except (ValueError, TypeError):
-                        pass
+                num_val = parse_float(val)
+                if num_val is not None:
+                    if num_val < 0:
+                        key = (inv_id, vendor, col, num_val, "Negative Value")
+                        if key not in seen_negatives:
+                            seen_negatives.add(key)
+                            anomalies.append({
+                                "type": "Negative Value",
+                                "Invoice_ID": inv_id,
+                                "Vendor_Name": vendor,
+                                "column": col,
+                                "value": num_val,
+                                "description": f"Field '{format_field_name(col)}' has a negative value ({num_val})"
+                            })
+                    elif num_val == 0 and col in ["Qty", "Unit_Price", "Line_Amount"]:
+                        key = (inv_id, vendor, col, num_val, "Zero Value")
+                        if key not in seen_negatives:
+                            seen_negatives.add(key)
+                            anomalies.append({
+                                "type": "Zero Value",
+                                "Invoice_ID": inv_id,
+                                "Vendor_Name": vendor,
+                                "column": col,
+                                "value": num_val,
+                                "description": f"Field '{format_field_name(col)}' has a value of zero (0)"
+                            })
 
     # 8. Vendor Master List and Status Checks
     cursor.execute("SELECT Vendor_ID, Vendor_Name, GSTIN, Bank_Account, Payment_Terms, Status FROM vendors")

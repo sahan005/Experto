@@ -18,24 +18,24 @@ async def test_pipeline():
     
     # 1. Duplicate Scenario
     cursor.execute("""
-        INSERT INTO invoices (invoice_id, vendor_name, total_amount, currency, source_file, upload_timestamp)
-        VALUES ('TEST-DUP-1', 'Test Vendor', 500, 'USD', 'file1.csv', '2026-06-24 22:00:00')
+        INSERT INTO invoices (Invoice_ID, Vendor_Name, Line_Amount, source_file, upload_timestamp)
+        VALUES ('TEST-DUP-1', 'Test Vendor', 500, 'file1.csv', '2026-06-24 22:00:00')
     """)
     
     # 2. Current Invoice upload with anomalies:
-    # - Negative value for quantity and total_amount
-    # - Missing values (vendor_id is null, due_date is null, approver_name is null)
+    # - Negative value for quantity and Line_Amount
+    # - Missing values
     # - Also triggers duplicate with TEST-DUP-1
     cursor.execute("""
         INSERT INTO invoices (
-            invoice_id, vendor_name, vendor_id, invoice_date, due_date,
-            line_item_description, quantity, unit_price, total_amount,
-            currency, purchase_order_number, payment_status, source_file, upload_timestamp
+            Invoice_ID, Vendor_Name, Vendor_GSTIN, Invoice_Date, Due_Date,
+            Line_Item_Description, Qty, Unit_Price, Line_Amount,
+            PO_Number, Payment_Terms, source_file, upload_timestamp
         )
         VALUES (
             'TEST-DUP-1', 'Test Vendor', NULL, '2023-06-15', NULL,
             'Damaged Widget', -5.0, 30.0, -150.0,
-            'USD', 'PO-9999', 'Unpaid', 'file2.csv', '2026-06-24 22:05:00'
+            'PO-9999', 'Unpaid', 'file2.csv', '2026-06-24 22:05:00'
         )
     """)
     conn.commit()
@@ -59,11 +59,8 @@ async def test_pipeline():
         print("\n=== SCAN FOR ALL ANOMALIES ===")
         print("Anomaly Count:", response.anomaly_count)
         print("Narration:", response.response)
-        print("CSV Output:\n", response.raw_csv)
-        print("Highlighted CSV Output:\n", response.highlighted_csv)
     except Exception as e:
-        print("\nERROR in scan:")
-        print(e)
+        print("\nERROR in scan:", e)
 
 if __name__ == "__main__":
     asyncio.run(test_pipeline())
