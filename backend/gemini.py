@@ -213,6 +213,9 @@ async def generate_sqlite_query(user_question: str) -> str:
         "  - min_price (REAL)\n"
         "  - max_price (REAL)\n"
         "  - expected_tax_rate (REAL)\n\n"
+        "IMPORTANT Context Rule:\n"
+        "Unless the user explicitly asks for 'all time', 'all files', 'entire database', or 'everything in the system', you MUST scope any queries regarding invoices, vendors, amounts, or anomalies to the LATEST UPLOADED FILE only. "
+        "To target the latest uploaded file, use: source_file = (SELECT source_file FROM invoices ORDER BY upload_timestamp DESC LIMIT 1)\n\n"
         "Return ONLY a JSON object with a single key 'sql' containing the SQLite SELECT statement. Do not wrap it in markdown code fences."
     )
     prompt = f"User question: '{user_question}'\n\nReturn ONLY the JSON object."
